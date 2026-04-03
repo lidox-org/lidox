@@ -2,6 +2,7 @@
 	"name": "@lidox/types",
 	"version": "1.0.0",
 	"private": true,
+	"packageManager": "npm@10.8.2",
 	"main": "./src/index.ts",
 	"types": "./src/index.ts",
 	"dependencies": {
@@ -30,5 +31,7 @@
 		"url": "https://github.com/lidox-org/lidox/issues"
 	},
 	"homepage": "https://github.com/lidox-org/lidox#readme",
-	"devDependencies": {}
+	"devDependencies": {
+		"turbo": "^2.9.3"
+	}
 }
