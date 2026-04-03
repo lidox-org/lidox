@@ -20,27 +20,27 @@ This project is a Turborepo-managed monorepo consisting of:
 
 ### 1. Infrastructure Setup
 Start the local PostgreSQL and Redis instances:
-\`\`\`bash
+```bash
 docker-compose up -d
-\`\`\`
+```
 
 ### 2. Environment Variables
 Copy the example environment file:
-\`\`\`bash
+```bash
 cp .env.example .env
-\`\`\`
+```
 *(Add your LLM provider API keys to the `.env` file if testing AI features).*
 
 ### 3. Install & Run
 Install dependencies from the repository root:
-\`\`\`bash
+```bash
 npm install
-\`\`\`
+```
 
 Start all services in development mode via Turborepo:
-\`\`\`bash
+```bash
 npx turbo run dev
-\`\`\`
+```
 
 ## 🛠️ Development Workflow
 - **Linting & Formatting:** We use [Biome](https://biomejs.dev/). Run `npx @biomejs/biome check --apply .`
