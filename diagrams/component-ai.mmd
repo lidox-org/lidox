@@ -1,0 +1,33 @@
+C4Component
+    title AI Orchestration Service - Component Diagram (C4 Level 3)
+
+    Container_Boundary(ai, "AI Orchestration Service") {
+        Component(router, "Request Router", "NestJS Controller", "Validates user role, checks doc AI-enabled flag, routes by task type")
+        Component(context, "Context Builder", "Service", "Extracts selection + surrounding context, applies task-aware token budget 800-16K")
+        Component(prompt, "Prompt Template Engine", "Service", "Selects and hydrates YAML templates per task type, supports hot-reload")
+        Component(serial, "Structured Serializer", "Service", "ProseMirror nodes to/from compact tagged LLM format")
+        Component(adapter, "LLM Provider Adapter", "Service", "Abstracts LLM API calls, model tiering fast/standard/premium, retries")
+        Component(meter, "Token Metering Engine", "Service", "Counts tokens, tracks per-org cost, enforces budget ceiling")
+        Component(proposal, "Proposal Manager", "Service", "Anchors to CRDT state vector, conflict detection match/rebase/stale, 120s TTL")
+        Component(audit, "Audit Logger", "Service", "Records AI interactions, respects org retention policy")
+    }
+
+    Container_Ext(apiext, "Backend API", "NestJS", "Routes AI invocation requests")
+    ContainerDb_Ext(redis, "Redis Cluster", "Redis 7", "CRDT cache, Pub/Sub")
+    ContainerDb_Ext(pg, "PostgreSQL", "PostgreSQL 16", "Audit logs, cost tracking")
+    Container_Ext(queueext, "Job Queue", "BullMQ", "Async execution")
+    System_Ext(llm, "External LLM", "AI provider API")
+
+    Rel(apiext, router, "POST /ai/invoke")
+    Rel(router, context, "Selected text + node ID")
+    Rel(context, prompt, "Contextualized input")
+    Rel(context, redis, "Read CRDT state")
+    Rel(prompt, serial, "Hydrated prompt")
+    Rel(serial, adapter, "Serialized prompt")
+    Rel(adapter, queueext, "Enqueue LLM job")
+    Rel(queueext, llm, "Prompt / response")
+    Rel(adapter, meter, "Token counts")
+    Rel(meter, pg, "Log cost")
+    Rel(adapter, proposal, "LLM response + state vector")
+    Rel(proposal, audit, "Interaction record")
+    Rel(audit, pg, "Persist audit log")
