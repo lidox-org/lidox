@@ -1,12 +1,26 @@
-# Environments
+node_modules/
+dist/
+.turbo/
+*.tsbuildinfo
+
+# Environment
 .env
 .env.local
-.env.development.local
-.env.test.local
-.env.production.local
+.env.*.local
 
-# Turborepo
-.turbo
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
 
-# Dependencies
-node_modules
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Test coverage
+coverage/
