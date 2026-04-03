@@ -1,6 +1,6 @@
 % =============================================================================
 %  LIDOX PLATFORM — COMPLETE ENGINEERING SPECIFICATION
-%  Assignment 1: Parts 1 & 2 | XeLaTeX
+%  Assignment 1 | XeLaTeX
 % =============================================================================
 \documentclass[10pt, a4paper]{article}
 \usepackage{ifxetex}
@@ -390,7 +390,7 @@ The Lidox platform interacts with two actor types and four external services.
 \vspace{4pt}
 \begin{figure}[H]
 \centering
-\includegraphics[width=\textwidth]{context.png}
+\includegraphics[width=\textwidth]{diagrams/context.png}
 \caption*{\small\color{inkMuted}Level 1: System Context Diagram \textsf{(Mermaid source: \texttt{diagrams/context.mmd})}}
 \end{figure}
 
@@ -425,7 +425,7 @@ C9: Job Queue & Async AI task execution, retries with exponential backoff & Bull
 \vspace{4pt}
 \begin{figure}[H]
 \centering
-\includegraphics[width=\textwidth]{container.png}
+\includegraphics[width=\textwidth]{diagrams/container.png}
 \caption*{\small\color{inkMuted}Level 2: Container Diagram \textsf{(Mermaid source: \texttt{diagrams/container.mmd})}}
 \end{figure}
 
@@ -463,7 +463,8 @@ Audit Logger & Records AI interactions: user ID, document ID, task type, token c
 \vspace{4pt}
 \begin{figure}[H]
 \centering
-\includegraphics[width=\textwidth]{component-ai.png}
+% \includegraphics[width=\textwidth]{component-ai.png}
+\includegraphics[width=\textwidth, height=0.75\textheight, keepaspectratio]{diagrams/component-ai.png}
 \caption*{\small\color{inkMuted}Level 3: AI Orchestration Service --- Component Diagram \textsf{(Mermaid source: \texttt{diagrams/component-ai.mmd})}}
 \end{figure}
 
@@ -663,7 +664,7 @@ Tests are co-located with source code (\texttt{*.spec.ts} next to \texttt{*.ts})
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=\textwidth]{erd.png}
+\includegraphics[width=\textwidth]{diagrams/erd.png}
 \caption*{\small\color{inkMuted}Entity-Relationship Diagram \textsf{(Mermaid source: \texttt{diagrams/erd.mmd})}}
 \end{figure}
 
@@ -757,7 +758,287 @@ GDPR Art.\ 17 & Right to erasure for AI interaction data & NFR-11 \\
 \end{tabularx}
 }
 
+% #############################################################################
+% PART 3: Project Management & Team Collaboration
+% #############################################################################
+
+\section{Team Structure \& Ownership}
+
+\subsection{Code Ownership Areas}
+
+Each team member owns a primary area of the codebase. Ownership means: first point of contact for bugs, responsible for code review approvals in that area, and accountable for test coverage.
+
+{\small
+\begin{tabularx}{\textwidth}{@{}lXX@{}}
+\toprule
+\textsf{\textbf{Ownership Area}} & \textsf{\textbf{Scope (Directories)}} & \textsf{\textbf{Key Responsibilities}} \\
+\midrule
+Brandon --- Architecture Lead & \texttt{docs/}, \texttt{diagrams/}, cross-cutting specs & System design, ADRs, C4 diagrams, requirements engineering, Mermaid diagrams, specification documents. Reviews all cross-cutting PRs. \\
+\addlinespace[3pt]
+Mohamed --- Frontend \& UX Lead & \texttt{apps/web/} & TipTap editor integration, AI suggestion overlay, presence rendering, offline IndexedDB buffer, state management, accessibility (WCAG 2.1 AA), responsive UI. \\
+\addlinespace[3pt]
+Abror --- AI \& Orchestration Lead & \texttt{apps/api/src/ai/}, \texttt{apps/sync-server/} & AI Orchestration Service, prompt templates, LLM provider adapter, token metering, Hocuspocus/Yjs sync server, CRDT operation relay, presence fan-out. \\
+\addlinespace[3pt]
+\tbd\ --- Backend \& DevOps Lead & \texttt{apps/api/} (core), \texttt{packages/types/}, infra & NestJS modules (auth, documents, permissions), REST API contracts, Zod schemas, role enforcement, Docker Compose, CI/CD (GitHub Actions), Redis/PostgreSQL setup. \\
+\bottomrule
+\end{tabularx}
+}
+
+\subsection{Cross-Cutting Feature Handling}
+
+Features that span multiple ownership areas (e.g., the AI assistant, which touches frontend, backend API, AI service, and real-time layer) are handled as follows:
+
+\begin{specenum}
+\item \textbf{Feature lead:} The team member whose area is most affected takes the lead. For the AI assistant, Abror leads because the AI Orchestration Service is the most complex component.
+\item \textbf{Interface contracts first:} Before implementation begins, all involved owners agree on the API contract (request/response schemas in \texttt{packages/types}). This contract is merged as the first PR for the feature.
+\item \textbf{Parallel implementation:} Each owner implements their side against the agreed contract. Integration tests validate the contract.
+\item \textbf{Integration PR:} The feature lead opens a final PR that wires everything together and runs E2E tests.
+\end{specenum}
+
+\subsection{Technical Disagreement Resolution}
+
+When team members disagree on a technical choice:
+\begin{specenum}
+\item The two parties each write a brief (max 200-word) argument in the GitHub issue.
+\item If unresolved in 24 hours, the team holds a 15-minute timeboxed discussion.
+\item If still unresolved, the person whose ownership area is most affected makes the final call and documents the decision as a lightweight ADR in \texttt{docs/decisions/}.
+\end{specenum}
+
+
 % =====================================================================
+\section{Development Workflow}
+
+\subsection{Branching Strategy}
+
+We use \textbf{GitHub Flow} (trunk-based with feature branches):
+
+\begin{speclist}
+\item \textbf{Main branch (\texttt{main}):} Always deployable. Protected: requires passing CI and at least 1 approved review.
+\item \textbf{Feature branches:} Named \texttt{feat/\{issue-number\}-short-description} (e.g., \texttt{feat/42-ai-proposal-overlay}).
+\item \textbf{Fix branches:} Named \texttt{fix/\{issue-number\}-short-description}.
+\item \textbf{Merge policy:} Squash merge to \texttt{main}. The squash commit message follows the Angular Conventional Commit format: \texttt{type(scope): description} (e.g., \texttt{feat(ai): add task-aware token budgeting}).
+\item \textbf{No long-lived branches:} Feature branches should be merged within 3 days. If a feature takes longer, break it into smaller PRs behind a feature flag.
+\end{speclist}
+
+\subsection{Code Review Process}
+
+\begin{speclist}
+\item \textbf{Every PR requires at least 1 approval} from a team member who is \emph{not} the author.
+\item \textbf{Cross-area PRs} (touching $>$1 ownership area) require approval from each affected area owner.
+\item \textbf{Review criteria:} (1) Does it match the API contract in \texttt{types}? (2) Are there tests? (3) No secrets in code. (4) No \texttt{console.log} in production code. (5) TypeScript strict mode passes.
+\item \textbf{Review SLA:} Reviews should be completed within 24 hours. If not, the author pings in the team channel.
+\item \textbf{CI gates:} Linting (ESLint), type checking (TypeScript), unit tests (Jest), integration tests (Supertest) must all pass before merge.
+\end{speclist}
+
+\subsection{Issue Tracking \& Task Assignment}
+
+\begin{speclist}
+\item \textbf{Tool:} GitHub Issues with project board (Kanban: Backlog $\to$ In Progress $\to$ In Review $\to$ Done).
+\item \textbf{Task granularity:} Each issue represents 1--3 days of work. Larger features are broken into sub-issues.
+\item \textbf{Assignment:} Issues are self-assigned during weekly planning. The ownership areas guide who picks what, but anyone can pick cross-cutting tasks.
+\item \textbf{Labels:} \texttt{frontend}, \texttt{backend}, \texttt{ai}, \texttt{infra}, \texttt{cross-cutting}, \texttt{bug}, \texttt{blocked}.
+\end{speclist}
+
+\subsection{Communication \& Decision Documentation}
+
+\begin{speclist}
+\item \textbf{Daily:} Async standup in a dedicated Discord/Slack channel (what I did, what I'm doing, blockers).
+\item \textbf{Weekly:} 30-minute synchronous planning meeting to review the board and assign the next sprint's issues.
+\item \textbf{Decisions:} Any architectural or technical decision is documented as an ADR in \texttt{docs/decisions/} or as a comment on the relevant GitHub issue. Chat messages are ephemeral; decisions must live in the repo.
+\end{speclist}
+
+
+% =====================================================================
+\section{Development Methodology}
+
+\subsection{Methodology: Scrum-Inspired Sprints (Modified)}
+
+We use a \textbf{lightweight Scrum framework} adapted for a 4-person team:
+
+\begin{speclist}
+\item \textbf{Sprint length:} 1 week. Short sprints force frequent integration and early detection of issues.
+\item \textbf{Sprint planning:} Monday, 30 minutes. Review backlog, assign issues for the week.
+\item \textbf{Sprint review:} Friday, 15 minutes. Demo what was completed; update stakeholders.
+\item \textbf{No daily standup meetings:} Replaced by async text standups (see above). A 4-person team doesn't need synchronous daily ceremonies.
+\end{speclist}
+
+\subsection{Backlog Prioritization}
+
+The backlog is prioritized using a \textbf{MoSCoW} framework aligned with architectural drivers:
+
+\begin{specenum}
+\item \textbf{Must Have (Sprint 1--2):} Core editing + real-time sync + basic auth + document CRUD. These are the architectural skeleton; nothing else works without them.
+\item \textbf{Must Have (Sprint 3--4):} AI invocation pipeline + proposal UX + role enforcement. The product differentiator.
+\item \textbf{Should Have (Sprint 5--6):} Version history, export, sharing UI, presence polish, accessibility.
+\item \textbf{Could Have (Sprint 7+):} Admin dashboard, org-level settings, advanced AI features (restructure, full-document analysis).
+\end{specenum}
+
+\subsection{Infrastructure \& Non-Feature Work}
+
+Non-feature work (database setup, CI pipeline, testing infrastructure, Docker Compose) is explicitly scheduled in Sprint~1 as ``infrastructure stories'' with the same acceptance criteria rigor as feature stories. Example: ``CI pipeline runs linting, type checking, and unit tests on every PR push, verified by a passing green check on a test PR.'' This prevents the common antipattern of perpetually deferred infrastructure.
+
+
+% =====================================================================
+\section{Risk Assessment}
+
+\begin{warnbox}[Assessment Criteria]
+\small Each risk is specific to the Lidox project. For each: description, likelihood (Low/Medium/High), impact (what breaks), mitigation strategy, and contingency plan if mitigation fails.
+\end{warnbox}
+
+\vspace{4pt}
+{\small
+
+\noindent\textbf{Risk 1: CRDT Implementation Complexity Causes Integration Delays}\\
+\textit{Likelihood:} Medium. \textit{Category:} Technical.\\
+\textit{Impact:} The core real-time editing experience is blocked. Without CRDT sync, the product has no value proposition. All downstream features (AI proposals, presence, versioning) depend on a working CRDT layer.\\
+\textit{Mitigation:} Use the mature Yjs library + Hocuspocus server rather than building a custom CRDT implementation. Start with a minimal TipTap + Yjs integration in Sprint~3 (Mar 23--26) as the first real-time deliverable.\\
+\textit{Contingency:} If Yjs integration proves too complex, fall back to a simpler OT-based approach using a central server (sacrificing offline editing initially) and revisit CRDTs in a later iteration.
+
+\lightrule
+\vspace{4pt}
+\noindent\textbf{Risk 2: LLM API Cost Overruns During Development and Production} \hfill {\footnotesize\color{danger}\textsf{AI-SPECIFIC}}\\
+\textit{Likelihood:} High. \textit{Category:} AI Integration / Financial.\\
+\textit{Impact:} Development API costs spiral during testing. In production, a single viral document with heavy AI usage could generate hundreds of dollars in charges before detection.\\
+\textit{Mitigation:} (1) Use recorded fixtures (saved LLM responses) for all CI testing---zero real API calls in automated tests. (2) Implement per-org budget with hard-stop in Sprint~4 (Mar 27--30) \emph{before} public deployment. (3) Set a \$50/month development API budget cap with team-wide alerts.\\
+\textit{Contingency:} If costs still overrun: reduce default token ceilings, remove premium-model tier (route all tasks to fast model), or temporarily disable AI features and focus on the collaboration core.
+
+\lightrule
+\vspace{4pt}
+\noindent\textbf{Risk 3: WebSocket Scaling Under Load}\\
+\textit{Likelihood:} Medium. \textit{Category:} Infrastructure.\\
+\textit{Impact:} As concurrent connections grow beyond a single server's capacity ($\sim$10K connections per node), users experience connection drops, missed CRDT operations, or presence lag.\\
+\textit{Mitigation:} Design the Real-Time Service as stateless from the start: CRDT state lives in Redis, not in server memory. Multiple Real-Time Service pods can serve the same document because they all relay through Redis Pub/Sub. Load testing with k6 WebSocket plugin validates capacity before each milestone.\\
+\textit{Contingency:} If Redis Pub/Sub becomes a bottleneck: shard Pub/Sub channels by document ID range, or migrate to a dedicated message broker (NATS/Kafka) for high-throughput fan-out.
+
+\lightrule
+\vspace{4pt}
+\noindent\textbf{Risk 4: AI Proposal Race Condition Causes Content Corruption}\\
+\textit{Likelihood:} Medium. \textit{Category:} Technical / AI Integration.\\
+\textit{Impact:} When collaborators edit text during the 2--8\,s AI round-trip, proposals anchored to stale character offsets silently corrupt document content. User trust in AI features collapses.\\
+\textit{Mitigation:} The anchor-based proposal resolution system (FR-2.2, ADR-06) detects stale proposals via CRDT state vector comparison and SHA-256 hash matching. This is implemented as a core part of Sprint~4 (AI integration, Mar 27--30), not deferred as an optimization.\\
+\textit{Contingency:} If state-vector-based anchoring proves too complex: fall back to a simpler ``lock the paragraph during AI processing'' approach (worse UX but prevents corruption) and iterate toward the anchor-based system in a later sprint.
+
+\lightrule
+\vspace{4pt}
+\noindent\textbf{Risk 5: Team Coordination Breakdown on Cross-Cutting Features} \hfill {\footnotesize\color{danger}\textsf{TEAM-SPECIFIC}}\\
+\textit{Likelihood:} Medium. \textit{Category:} Team Coordination.\\
+\textit{Impact:} The AI assistant touches frontend (proposal overlay), backend (routing), AI service (orchestration), and real-time (WebSocket delivery). If team members implement their parts with incompatible assumptions, integration fails at the end of the sprint---a classic integration hell scenario.\\
+\textit{Mitigation:} (1) Shared type definitions in \texttt{packages/types} serve as executable API contracts---if the types don't compile, the integration is broken. (2) Interface contracts are merged as the \emph{first} PR for any cross-cutting feature, before parallel implementation begins. (3) Integration tests run in CI against all services simultaneously.\\
+\textit{Contingency:} If integration still breaks: dedicate a full ``integration sprint'' where all team members work together in a single call/room to wire the feature end-to-end. Reduce parallel work in favor of sequential, paired programming until the integration pattern is established.
+
+\lightrule
+\vspace{4pt}
+\noindent\textbf{Risk 6: LLM Provider Outage or Rate Limiting During Demo} \hfill {\footnotesize\color{danger}\textsf{AI-SPECIFIC}}\\
+\textit{Likelihood:} Low--Medium. \textit{Category:} External Dependency.\\
+\textit{Impact:} If the LLM API is down or rate-limited during a demo or grading session, the AI features appear non-functional.\\
+\textit{Mitigation:} Implement graceful degradation (NFR-07): the editing platform remains fully functional; AI toolbar shows ``temporarily unavailable.'' Additionally, maintain a set of pre-recorded AI responses that can be replayed as a ``demo mode'' fallback.\\
+\textit{Contingency:} Switch to a local model (e.g., Ollama with a small open-source model) for demo purposes. Quality will be lower, but the architectural pipeline (invoke$\to$queue$\to$process$\to$proposal) is demonstrated end-to-end.
+}
+
+
+% =====================================================================
+\section{Timeline and Milestones}
+
+\begin{decisionbox}[Milestone Acceptance Criteria]
+\small Each milestone has concrete, verifiable acceptance criteria. ``Finish backend'' is not a milestone; ``API serves document CRUD with authentication, verified by integration tests'' is.
+\end{decisionbox}
+
+{\small
+\begin{tabularx}{\textwidth}{@{}l>{\raggedright}p{2.0cm}Xp{3.5cm}@{}}
+\toprule
+\textsf{\textbf{Sprint}} & \textsf{\textbf{Dates}} & \textsf{\textbf{Deliverables}} & \textsf{\textbf{Acceptance Criteria}} \\
+\midrule
+\textbf{Sprint 1} & Mar 17--19 &
+  \textbf{M1: Architectural Skeleton.}
+  Monorepo setup (Turborepo). Docker Compose (PG + Redis). CI pipeline (lint + type check + unit tests). Basic NestJS API scaffolding. React + TipTap editor renders locally. &
+  (1) \texttt{turbo dev} starts all 3 apps.
+  (2) CI passes on a test PR.
+  (3) TipTap editor renders and accepts keystrokes locally. \\
+\addlinespace[4pt]
+\textbf{Sprint 2} & Mar 20--22 &
+  \textbf{M2: Core CRUD + Auth.}
+  Document CRUD API (\texttt{POST/GET/PATCH/DELETE /api/documents}). JWT auth (login, register, refresh). Frontend connects to API: create document, load document. &
+  (1) Integration tests pass for all document endpoints.
+  (2) Unauthenticated requests return 401.
+  (3) Frontend creates and loads a document via the API. \\
+\addlinespace[4pt]
+\textbf{Sprint 3} & Mar 23--26 &
+  \textbf{M3: Real-Time Sync.}
+  Hocuspocus server with Yjs. WebSocket connection from frontend. Two browser tabs sync edits in real-time. Presence (cursors) displayed. &
+  (1) Two tabs editing the same document see each other's changes within 300\,ms.
+  (2) Cursor positions are visible across tabs.
+  (3) Disconnecting and reconnecting restores state. \\
+\addlinespace[4pt]
+\textbf{Sprint 4} & Mar 27--30 &
+  \textbf{M4: AI Integration.}
+  AI invocation endpoint. Job queue (BullMQ). LLM provider adapter (one provider). Proposal UX (diff overlay, accept/reject). Token metering. &
+  (1) User selects text and invokes ``Rewrite''; AI proposal appears as a diff.
+  (2) Accept commits to CRDT; reject dismisses.
+  (3) Token count is logged per request. \\
+\addlinespace[4pt]
+\textbf{Sprint 5} & Mar 31--Apr 2 &
+  \textbf{M5: Permissions + Sharing.}
+  Role-based access control (Owner/Editor/Commenter/Viewer). Share document by email. Permission enforcement on API and WebSocket. &
+  (1) Viewer cannot edit. Commenter can comment but not edit.
+  (2) Sharing by email sends invitation.
+  (3) Permission revocation terminates active WebSocket within 60\,s. \\
+\addlinespace[4pt]
+\textbf{Sprint 6} & Apr 3--5 &
+  \textbf{M6: Polish + Hardening.}
+  Version history UI. Export (PDF/DOCX). Offline editing. Presence collapse ($>$10 users). Accessibility pass. Load testing. &
+  (1) Version history shows $\ge$5 snapshots for an actively edited document.
+  (2) Export produces valid DOCX.
+  (3) k6 load test: 50 concurrent editors, p95 $\le$150\,ms. \\
+\bottomrule
+\end{tabularx}
+}
+
+\vspace{8pt}
+\begin{notebox}[Dependency Chain]
+\small M1 (skeleton) $\to$ M2 (CRUD+Auth) $\to$ M3 (real-time sync) $\to$ M4 (AI integration) $\to$ M5 (permissions) $\to$ M6 (polish). Each milestone builds on the previous. The AI integration (M4) deliberately comes \emph{after} real-time sync (M3) because the AI proposal conflict resolution depends on a working CRDT layer.
+\end{notebox}
+
+
+% \vfill\lightrule\vspace{6pt}
+% \begin{center}
+% \begin{tikzpicture}\fill[accent](0,0)rectangle(0.22cm,0.22cm);\fill[accent!50](0.3cm,0)rectangle(0.52cm,0.22cm);\end{tikzpicture}\\[4pt]
+% {\small\color{inkMuted}\textsf{LIDOX --- Part 3: Project Management \& Team Collaboration}}\\[2pt]
+% {\scriptsize\color{inkFaint}\textsf{April 2026 --- End of Document}}
+% \end{center}
+
+% #############################################################################
+% PART 4: PROOF OF CONCEPT
+% #############################################################################
+\section{Proof of Concept}
+
+\begin{notebox}[PoC Deliverables]
+\small The Proof of Concept demonstrates the foundational architecture (M1 \& M2 milestones): monorepo structure, strictly typed frontend-to-backend communication, configured infrastructure (Docker Compose), and the automated CI pipeline. 
+\end{notebox}
+
+\vspace{10pt}
+\noindent
+\textbf{\large 1. Repository Link}\\[4pt]
+The complete, version-controlled source code is available here:\\
+\url{https://github.com/lidox-org/lidox}
+
+\vspace{10pt}
+\noindent
+\textbf{\large 2. Demonstration Video}\\[4pt]
+A brief video demonstrating the frontend communicating with the backend, alongside a walkthrough of the repository structure and CI/CD pipeline, can be found here: \href{https://mbzuaiac-my.sharepoint.com/:f:/g/personal/abror_shopulatov_mbzuai_ac_ae/IgBouzKI14t7TKpjQfCvi6jUAZ9-GNJulMKSRsfUx6hQgVU?e=2nZIbh}{lidox-video}
+
+\vspace{10pt}
+\noindent
+\textbf{\large 3. Verification Details}\\[4pt]
+To verify the architecture against the repository:
+\begin{speclist}
+    \item \textbf{Monorepo Structure:} Validated by the root \texttt{turbo.json} and \texttt{package.json} workspaces.
+    \item \textbf{Data Contracts:} Validated by the shared \texttt{packages/types} folder containing Zod schemas utilized by both the NestJS API and React frontend.
+    \item \textbf{Infrastructure:} Validated by the \texttt{docker-compose.yml} configuring PostgreSQL 16 and Redis 7 as specified in ADR-05.
+    \item \textbf{CI/CD:} Validated by the passing GitHub Actions workflow (\texttt{.github/workflows/ci.yml}) utilizing Biome and Turborepo.
+\end{speclist}
+
+% =====================================================================
+\newpage
 \section{Glossary}
 
 {\small
@@ -781,7 +1062,7 @@ BullMQ & Redis-based job queue for Node.js with retry and scheduling support. \\
 \vfill\lightrule\vspace{6pt}
 \begin{center}
 \begin{tikzpicture}\fill[accent](0,0)rectangle(0.22cm,0.22cm);\fill[accent!50](0.3cm,0)rectangle(0.52cm,0.22cm);\end{tikzpicture}\\[4pt]
-{\small\color{inkMuted}\textsf{LIDOX ENGINEERING SPECIFICATION v3.0 --- Parts 1 \& 2}}\\[2pt]
+{\small\color{inkMuted}\textsf{LIDOX ENGINEERING SPECIFICATION v3.0}}\\[2pt]
 {\scriptsize\color{inkFaint}\textsf{April 2026 --- End of Document}}
 \end{center}
 
