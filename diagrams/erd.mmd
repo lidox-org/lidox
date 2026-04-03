@@ -1,0 +1,72 @@
+erDiagram
+    users ||--o{ documents : "owns"
+    users ||--o{ permissions : "granted"
+    users ||--o{ ai_interactions : "invokes"
+    users ||--o{ refresh_tokens : "has"
+    users }o--|| organizations : "belongs to"
+    documents ||--o{ document_versions : "has"
+    documents ||--o{ permissions : "shared via"
+    documents ||--o{ ai_interactions : "has"
+
+    users {
+        uuid id PK
+        string email UK
+        string password_hash "nullable for SSO"
+        string name
+        string avatar_url
+        uuid org_id FK
+        timestamp created_at
+    }
+    organizations {
+        uuid id PK
+        string name
+        int ai_budget_cents
+        int ai_budget_used_cents
+        int ai_retention_days
+    }
+    documents {
+        uuid id PK
+        string title
+        uuid owner_id FK
+        boolean ai_enabled
+        timestamp created_at
+        timestamp updated_at
+        timestamp deleted_at "soft delete"
+    }
+    document_versions {
+        uuid id PK
+        uuid document_id FK
+        string snapshot_url "S3 path"
+        int crdt_clock
+        uuid created_by FK
+        timestamp created_at
+    }
+    permissions {
+        uuid id PK
+        uuid document_id FK
+        uuid user_id FK "nullable for link sharing"
+        string link_token "nullable"
+        enum role "owner editor commenter viewer"
+        timestamp created_at
+    }
+    ai_interactions {
+        uuid id PK
+        uuid document_id FK
+        uuid user_id FK
+        enum task_type "rewrite summarize translate grammar"
+        int input_tokens
+        int output_tokens
+        string model_used
+        int cost_cents
+        enum status "accepted rejected partial expired"
+        string source_text_hash
+        timestamp created_at
+    }
+    refresh_tokens {
+        uuid id PK
+        uuid user_id FK
+        string token_hash
+        uuid family_id "replay detection"
+        timestamp expires_at
+        boolean used
+    }
