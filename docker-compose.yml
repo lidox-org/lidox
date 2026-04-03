@@ -1,0 +1,34 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: lidox-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-lidox}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-lidox_dev}
+      POSTGRES_DB: ${POSTGRES_DB:-lidox}
+    ports:
+      - "5432:5432"
+    volumes:
+      - lidox_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lidox"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: lidox-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - lidox_redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  lidox_pgdata:
+  lidox_redis:
