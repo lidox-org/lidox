@@ -1,37 +1,25 @@
 {
-	"name": "@lidox/types",
-	"version": "1.0.0",
-	"private": true,
-	"packageManager": "npm@10.8.2",
-	"main": "./src/index.ts",
-	"types": "./src/index.ts",
-	"dependencies": {
-		"zod": "^3.22.4"
-	},
-	"workspaces": [
-		"apps/*",
-		"packages/*"
-	],
-	"description": "Collaborative Document Editor with AI Writing Assistant. Done as part of assignment in AI1220 course",
-	"directories": {
-		"doc": "docs"
-	},
-	"scripts": {
-		"test": "echo \"Error: no test specified\" && exit 1"
-	},
-	"repository": {
-		"type": "git",
-		"url": "git+https://github.com/lidox-org/lidox.git"
-	},
-	"keywords": [],
-	"author": "",
-	"license": "ISC",
-	"type": "commonjs",
-	"bugs": {
-		"url": "https://github.com/lidox-org/lidox/issues"
-	},
-	"homepage": "https://github.com/lidox-org/lidox#readme",
-	"devDependencies": {
-		"turbo": "^2.9.3"
-	}
+  "name": "lidox",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down"
+  },
+  "devDependencies": {
+    "turbo": "^2.4.0",
+    "typescript": "^5.7.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "packageManager": "npm@11.6.2"
 }
