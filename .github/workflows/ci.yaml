@@ -1,0 +1,31 @@
+name: CI (Lint & Test)
+
+on:
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  build-lint-test:
+    name: Build, Lint, and Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: 'npm' # or 'pnpm' / 'yarn'
+
+      - name: Install dependencies
+        run: npm install
+
+      # 1. Run Biome (replaces ESLint and Prettier)
+      - name: Lint and Format (Biome)
+        run: npx @biomejs/biome ci .
+
+      # 2. Run Turborepo tasks (Build, Unit Tests)
+      # This relies on your turbo.json configuration
+      - name: Run Build and Tests
+        run: npx turbo run build test:unit
