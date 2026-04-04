@@ -58,20 +58,12 @@ Get a free Groq API key at [console.groq.com](https://console.groq.com). Without
 ### 3. Start infrastructure
 
 ```bash
-npm run db:up
+docker compose up -d
 ```
 
-This starts PostgreSQL 16 and Redis 7 via Docker Compose.
+This starts PostgreSQL 16 and Redis 7 via Docker Compose. Database tables are created automatically when the API boots for the first time.
 
-### 4. Run database migrations
-
-```bash
-cd apps/api
-npm run db:migrate
-cd ../..
-```
-
-### 5. Start all services
+### 4. Start all services
 
 ```bash
 npm run dev
