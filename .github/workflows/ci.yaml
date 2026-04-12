@@ -1,4 +1,4 @@
-name: CI (Lint & Test)
+name: CI (Lint, Typecheck & Build)
 
 on:
   pull_request:
@@ -6,7 +6,7 @@ on:
 
 jobs:
   build-lint-test:
-    name: Build, Lint, and Test
+    name: Build, Lint, and Typecheck
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -21,11 +21,11 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      # 1. Run Biome (replaces ESLint and Prettier)
-      - name: Lint and Format (Biome)
-        run: npx @biomejs/biome ci .
+      - name: Lint (Biome)
+        run: npm run lint
 
-      # 2. Run Turborepo tasks (Build, Unit Tests)
-      # This relies on your turbo.json configuration
-      - name: Run Build and Tests
-        run: npx turbo run build test:unit
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
