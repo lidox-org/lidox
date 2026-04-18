@@ -6,6 +6,8 @@
     "dev": "nest start --watch",
     "build": "nest build",
     "start": "node dist/main.js",
+    "test": "node --test --import tsx ./test/**/*.test.ts",
+    "test:watch": "node --test --watch --import tsx ./test/**/*.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
