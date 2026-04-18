@@ -245,10 +245,9 @@ export function Editor() {
       aiProposal.anchorTo,
     );
     const currentStateVector = encodeStateVector(ydoc);
-    const appliedContent =
-      input.action === 'accept' && aiProposal.proposedHtml
-        ? aiProposal.proposedHtml
-        : (input.html ?? input.text);
+    const appliedContent = aiProposal.readOnly
+      ? input.text
+      : (input.html ?? input.text);
 
     try {
       await api(`/documents/${documentId}/ai/tasks/${aiProposal.taskId}/review`, {
@@ -437,6 +436,7 @@ export function Editor() {
                   taskId={aiProposal.taskId}
                   taskType={aiProposal.taskType}
                   original={aiProposal.originalText}
+                  originalHtml={aiProposal.originalHtml}
                   proposed={aiProposal.proposedText}
                   proposedHtml={aiProposal.proposedHtml}
                   readOnly={aiProposal.readOnly}

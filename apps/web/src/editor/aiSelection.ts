@@ -9,6 +9,11 @@ export interface SerializedSelectionRange {
   html: string;
 }
 
+export interface HtmlSentenceSlice {
+  text: string;
+  html: string;
+}
+
 export function serializeCurrentSelection(
   editor: Editor,
 ): SerializedSelectionRange | null {
@@ -61,6 +66,31 @@ export function htmlToText(html: string): string {
   return parsed.body.textContent?.replace(/\s+/g, ' ').trim() ?? '';
 }
 
+export function splitHtmlFragmentIntoSentences(
+  html: string,
+): HtmlSentenceSlice[] {
+  if (!html.trim()) {
+    return [];
+  }
+
+  const temporaryDocument = document.implementation.createHTMLDocument();
+  const container = temporaryDocument.createElement('div');
+  container.innerHTML = html;
+
+  const textNodes = collectTextNodes(container);
+  if (textNodes.length === 0) {
+    return [];
+  }
+
+  const rawText = container.textContent ?? '';
+  const ranges = splitTextIntoSentenceRanges(rawText);
+
+  return ranges.map((range) => ({
+    text: normalizeText(rawText.slice(range.start, range.end)),
+    html: cloneHtmlRange(container, textNodes, range.start, range.end),
+  }));
+}
+
 export function encodeStateVector(doc: Y.Doc | null): string | undefined {
   if (!doc) {
     return undefined;
@@ -79,4 +109,101 @@ function bytesToBase64(bytes: Uint8Array): string {
   }
 
   return btoa(binary);
+}
+
+function splitTextIntoSentenceRanges(
+  text: string,
+): Array<{ start: number; end: number }> {
+  const ranges: Array<{ start: number; end: number }> = [];
+  const sentencePattern = /[^.!?]+[.!?]?\s*/g;
+
+  for (const match of text.matchAll(sentencePattern)) {
+    const value = match[0];
+    const index = match.index ?? 0;
+
+    if (!normalizeText(value)) {
+      continue;
+    }
+
+    ranges.push({
+      start: index,
+      end: index + value.length,
+    });
+  }
+
+  if (ranges.length === 0 && normalizeText(text)) {
+    return [{ start: 0, end: text.length }];
+  }
+
+  return ranges;
+}
+
+function normalizeText(text: string): string {
+  return text.replace(/\s+/g, ' ').trim();
+}
+
+function collectTextNodes(
+  container: HTMLElement,
+): Array<{ node: Text; start: number; end: number }> {
+  const walker = container.ownerDocument.createTreeWalker(
+    container,
+    NodeFilter.SHOW_TEXT,
+  );
+  const textNodes: Array<{ node: Text; start: number; end: number }> = [];
+  let offset = 0;
+
+  while (walker.nextNode()) {
+    const node = walker.currentNode as Text;
+    const value = node.textContent ?? '';
+    const length = value.length;
+
+    textNodes.push({
+      node,
+      start: offset,
+      end: offset + length,
+    });
+
+    offset += length;
+  }
+
+  return textNodes;
+}
+
+function cloneHtmlRange(
+  container: HTMLElement,
+  textNodes: Array<{ node: Text; start: number; end: number }>,
+  start: number,
+  end: number,
+): string {
+  const range = container.ownerDocument.createRange();
+  const startPosition = resolveTextPosition(textNodes, start);
+  const endPosition = resolveTextPosition(textNodes, end);
+  const fragmentContainer = container.ownerDocument.createElement('div');
+
+  range.setStart(startPosition.node, startPosition.offset);
+  range.setEnd(endPosition.node, endPosition.offset);
+  fragmentContainer.appendChild(range.cloneContents());
+
+  return fragmentContainer.innerHTML;
+}
+
+function resolveTextPosition(
+  textNodes: Array<{ node: Text; start: number; end: number }>,
+  globalOffset: number,
+): { node: Text; offset: number } {
+  const fallback = textNodes[textNodes.length - 1];
+
+  for (const entry of textNodes) {
+    if (globalOffset <= entry.end) {
+      return {
+        node: entry.node,
+        offset: Math.max(0, Math.min(globalOffset - entry.start, entry.end - entry.start)),
+      };
+    }
+  }
+
+  return {
+    node: fallback.node,
+    offset: fallback.end - fallback.start,
+  };
 }
