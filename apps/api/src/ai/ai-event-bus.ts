@@ -10,18 +10,23 @@ import { redis } from '../config/redis';
 
 const EVENT_TTL_SECONDS = 3600;
 const EVENT_BUFFER_LIMIT = 512;
+const STREAM_BLOCK_TIMEOUT_MS = 1000;
 const TERMINAL_EVENTS = new Set<AiTaskEventType>([
   'complete',
   'failed',
   'cancelled',
 ]);
 
-function eventChannel(taskId: string): string {
-  return `ai:events:${taskId}:channel`;
+type RedisStreamEntry = [id: string, fields: string[]];
+type RedisStreamResponse = Array<[stream: string, entries: RedisStreamEntry[]]>;
+
+interface BufferedAiTaskEvent {
+  id: string;
+  event: AiTaskEvent;
 }
 
-function eventBufferKey(taskId: string): string {
-  return `ai:events:${taskId}:buffer`;
+function eventStreamKey(taskId: string): string {
+  return `ai:events:${taskId}:stream`;
 }
 
 export function isTerminalAiTaskEvent(event: AiTaskEvent): boolean {
@@ -29,24 +34,26 @@ export function isTerminalAiTaskEvent(event: AiTaskEvent): boolean {
 }
 
 export async function publishAiTaskEvent(event: AiTaskEvent): Promise<void> {
+  const streamKey = eventStreamKey(event.taskId);
   const payload = JSON.stringify(event);
-  const bufferKey = eventBufferKey(event.taskId);
 
-  await redis
-    .multi()
-    .rpush(bufferKey, payload)
-    .ltrim(bufferKey, -EVENT_BUFFER_LIMIT, -1)
-    .expire(bufferKey, EVENT_TTL_SECONDS)
-    .publish(eventChannel(event.taskId), payload)
-    .exec();
+  await redis.xadd(
+    streamKey,
+    'MAXLEN',
+    '~',
+    EVENT_BUFFER_LIMIT,
+    '*',
+    'event',
+    payload,
+  );
+  await redis.expire(streamKey, EVENT_TTL_SECONDS);
 }
 
 export async function readBufferedAiTaskEvents(
   taskId: string,
 ): Promise<AiTaskEvent[]> {
-  const buffered = await redis.lrange(eventBufferKey(taskId), 0, -1);
-
-  return buffered.map((payload) => AiTaskEventSchema.parse(JSON.parse(payload)));
+  const buffered = await readBufferedAiTaskEventEntries(redis, taskId);
+  return buffered.map((entry) => entry.event);
 }
 
 export function createAiTaskEventStream(
@@ -68,47 +75,53 @@ export function createAiTaskEventStream(
       }
     };
 
-    const onMessage = (channel: string, payload: string) => {
-      if (channel !== eventChannel(taskId)) {
-        return;
-      }
-
-      emitEvent(AiTaskEventSchema.parse(JSON.parse(payload)));
-    };
-
     const cleanup = async () => {
       if (cleanedUp) {
         return;
       }
       cleanedUp = true;
 
-      subscription.off('message', onMessage);
-
-      try {
-        if (subscription.status !== 'end') {
-          await subscription.quit();
-        }
-      } catch {
-        subscription.disconnect();
-      }
+      subscription.disconnect();
     };
 
     const start = async () => {
-      const bufferedEvents = await readBufferedAiTaskEvents(taskId);
-      for (const event of bufferedEvents) {
-        emitEvent(event);
-        if (isTerminalAiTaskEvent(event)) {
+      await ensureRedisConnection(subscription);
+
+      const bufferedEntries = await readBufferedAiTaskEventEntries(
+        subscription,
+        taskId,
+      );
+      let lastEventId =
+        bufferedEntries[bufferedEntries.length - 1]?.id ?? '0-0';
+
+      for (const entry of bufferedEntries) {
+        emitEvent(entry.event);
+        if (isTerminalAiTaskEvent(entry.event)) {
           return;
         }
       }
 
-      subscription.on('message', onMessage);
-      await ensureRedisConnection(subscription);
-      await subscription.subscribe(eventChannel(taskId));
+      while (!cleanedUp) {
+        const liveEntries = await readNextAiTaskEventEntries(
+          subscription,
+          taskId,
+          lastEventId,
+        );
+
+        for (const entry of liveEntries) {
+          lastEventId = entry.id;
+          emitEvent(entry.event);
+          if (isTerminalAiTaskEvent(entry.event)) {
+            return;
+          }
+        }
+      }
     };
 
     void start().catch(async (error) => {
-      subscriber.error(error);
+      if (!cleanedUp) {
+        subscriber.error(error);
+      }
       await cleanup();
     });
 
@@ -122,4 +135,62 @@ async function ensureRedisConnection(client: Redis): Promise<void> {
   if (client.status === 'wait') {
     await client.connect();
   }
+}
+
+async function readBufferedAiTaskEventEntries(
+  client: Redis,
+  taskId: string,
+): Promise<BufferedAiTaskEvent[]> {
+  const entries = (await client.xrange(
+    eventStreamKey(taskId),
+    '-',
+    '+',
+  )) as RedisStreamEntry[];
+
+  return entries.map(parseBufferedAiTaskEvent);
+}
+
+async function readNextAiTaskEventEntries(
+  client: Redis,
+  taskId: string,
+  lastEventId: string,
+): Promise<BufferedAiTaskEvent[]> {
+  const response = (await client.xread(
+    'COUNT',
+    EVENT_BUFFER_LIMIT,
+    'BLOCK',
+    STREAM_BLOCK_TIMEOUT_MS,
+    'STREAMS',
+    eventStreamKey(taskId),
+    lastEventId,
+  )) as RedisStreamResponse | null;
+
+  if (!response) {
+    return [];
+  }
+
+  return response.flatMap(([, entries]) => entries.map(parseBufferedAiTaskEvent));
+}
+
+function parseBufferedAiTaskEvent(entry: RedisStreamEntry): BufferedAiTaskEvent {
+  const [id, fields] = entry;
+  const payload = readStreamField(fields, 'event');
+
+  return {
+    id,
+    event: AiTaskEventSchema.parse(JSON.parse(payload)),
+  };
+}
+
+function readStreamField(fields: string[], name: string): string {
+  for (let index = 0; index < fields.length; index += 2) {
+    if (fields[index] === name) {
+      const value = fields[index + 1];
+      if (value !== undefined) {
+        return value;
+      }
+    }
+  }
+
+  throw new Error(`Missing ${name} field in stored AI task event`);
 }
