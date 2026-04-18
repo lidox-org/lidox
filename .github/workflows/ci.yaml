@@ -1,4 +1,4 @@
-name: CI (Lint, Typecheck & Build)
+name: CI (Lint, Typecheck, Test & Build)
 
 on:
   pull_request:
@@ -6,7 +6,7 @@ on:
 
 jobs:
   build-lint-test:
-    name: Build, Lint, and Typecheck
+    name: Build, Lint, Typecheck, and Test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -16,16 +16,19 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "20"
-          cache: 'npm' # or 'pnpm' / 'yarn'
+          cache: 'npm'
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: Lint (Biome)
         run: npm run lint
 
       - name: Typecheck
         run: npm run typecheck
+
+      - name: Test
+        run: npm test
 
       - name: Build
         run: npm run build
