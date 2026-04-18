@@ -10,13 +10,21 @@ import {
   Loader2,
   Sparkles,
   AlertCircle,
+  Square,
 } from 'lucide-react';
-import { api } from '../lib/api';
+import { api, getAccessToken } from '../lib/api';
 
 interface Props {
   editor: Editor | null;
   documentId: string;
-  onAiResult: (taskId: string, original: string, result: string, taskType: string) => void;
+  onAiProposalChange: (proposal: {
+    taskId: string;
+    taskType: string;
+    original: string;
+    proposed: string;
+    streaming: boolean;
+    stale: boolean;
+  } | null) => void;
 }
 
 type AiTask = 'rewrite' | 'summarize' | 'translate' | 'grammar' | 'analyze' | 'explain';
@@ -30,11 +38,12 @@ const AI_ACTIONS: { task: AiTask; label: string; icon: React.ReactNode }[] = [
   { task: 'explain', label: 'Explain', icon: <HelpCircle className="h-3.5 w-3.5" /> },
 ];
 
-export function AiToolbar({ editor, documentId, onAiResult }: Props) {
+export function AiToolbar({ editor, documentId, onAiProposalChange }: Props) {
   const [visible, setVisible] = useState(false);
   const [position, setPosition] = useState({ top: 0, left: 0 });
   const [loading, setLoading] = useState<AiTask | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
   const selectedTextRef = useRef('');
   const rafRef = useRef<number>();
@@ -123,33 +132,138 @@ export function AiToolbar({ editor, documentId, onAiResult }: Props) {
         method: 'POST',
         body: JSON.stringify({ task, selection }),
       });
+      setActiveTaskId(response.taskId);
+      onAiProposalChange({
+        taskId: response.taskId,
+        taskType: task,
+        original: selection,
+        proposed: '',
+        streaming: true,
+        stale: false,
+      });
 
-      // Poll until completed (max 60 seconds)
-      const poll = async (attempts = 0): Promise<string> => {
-        if (attempts > 60) throw new Error('AI request timed out');
-
-        const result = await api<{ status: string; result?: string; error?: string }>(
-          `/documents/${documentId}/ai/tasks/${response.taskId}`,
-        );
-
-        if (result.status === 'completed' && result.result) return result.result;
-        if (result.status === 'failed') throw new Error(result.error || 'AI task failed');
-
-        await new Promise((r) => setTimeout(r, 1000));
-        return poll(attempts + 1);
-      };
-
-      const result = await poll();
-      onAiResult(response.taskId, selection, result, task);
+      const result = await streamTask(response.taskId, selection, task);
+      onAiProposalChange({
+        taskId: response.taskId,
+        taskType: task,
+        original: selection,
+        proposed: result,
+        streaming: false,
+        stale: false,
+      });
       setVisible(false);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'AI failed';
       setError(msg);
+      onAiProposalChange(null);
       // Auto-clear error after 3s
       setTimeout(() => setError(null), 3000);
     } finally {
       setLoading(null);
+      setActiveTaskId(null);
     }
+  };
+
+  const handleCancel = async () => {
+    if (!activeTaskId) return;
+
+    try {
+      await api(`/documents/${documentId}/ai/tasks/${activeTaskId}/cancel`, {
+        method: 'POST',
+      });
+      setError('AI generation cancelled');
+      onAiProposalChange(null);
+      setVisible(false);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to cancel AI';
+      setError(msg);
+    } finally {
+      setLoading(null);
+      setActiveTaskId(null);
+    }
+  };
+
+  const streamTask = async (
+    taskId: string,
+    original: string,
+    taskType: AiTask,
+  ): Promise<string> => {
+    const headers = new Headers({
+      Accept: 'text/event-stream',
+    });
+    const accessToken = getAccessToken();
+    if (accessToken) {
+      headers.set('Authorization', `Bearer ${accessToken}`);
+    }
+
+    const response = await fetch(
+      `/api/documents/${documentId}/ai/tasks/${taskId}/stream`,
+      {
+        method: 'GET',
+        headers,
+        credentials: 'include',
+      },
+    );
+
+    if (!response.ok || !response.body) {
+      throw new Error(`AI stream failed: ${response.statusText}`);
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let result = '';
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+
+      let separatorIndex = buffer.indexOf('\n\n');
+      while (separatorIndex >= 0) {
+        const rawEvent = buffer.slice(0, separatorIndex);
+        buffer = buffer.slice(separatorIndex + 2);
+        separatorIndex = buffer.indexOf('\n\n');
+
+        const parsedEvent = parseSseEvent(rawEvent);
+        if (!parsedEvent?.data) continue;
+
+        const event = JSON.parse(parsedEvent.data) as {
+          type: string;
+          chunk?: string;
+          result?: string;
+          error?: string;
+        };
+
+        if (event.type === 'chunk' && event.chunk) {
+          result += event.chunk;
+          onAiProposalChange({
+            taskId,
+            taskType,
+            original,
+            proposed: result,
+            streaming: true,
+            stale: false,
+          });
+          continue;
+        }
+
+        if (event.type === 'complete') {
+          return event.result ?? result;
+        }
+
+        if (event.type === 'failed') {
+          throw new Error(event.error || 'AI generation failed');
+        }
+
+        if (event.type === 'cancelled') {
+          throw new Error('AI generation cancelled');
+        }
+      }
+    }
+
+    return result;
   };
 
   if (!visible) return null;
@@ -184,6 +298,17 @@ export function AiToolbar({ editor, documentId, onAiResult }: Props) {
               {label}
             </button>
           ))}
+
+          {loading && activeTaskId && (
+            <button
+              onClick={handleCancel}
+              title="Cancel"
+              className="ml-1 flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-muted hover:bg-surface hover:text-ink transition-default"
+            >
+              <Square className="h-3.5 w-3.5" />
+              Cancel
+            </button>
+          )}
         </div>
 
         {error && (
@@ -195,4 +320,25 @@ export function AiToolbar({ editor, documentId, onAiResult }: Props) {
       </div>
     </div>
   );
+}
+
+function parseSseEvent(rawEvent: string): { event?: string; data?: string } | null {
+  const lines = rawEvent
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (lines.length === 0) {
+    return null;
+  }
+
+  const eventLine = lines.find((line) => line.startsWith('event:'));
+  const dataLines = lines
+    .filter((line) => line.startsWith('data:'))
+    .map((line) => line.slice(5).trim());
+
+  return {
+    event: eventLine ? eventLine.slice(6).trim() : undefined,
+    data: dataLines.join('\n'),
+  };
 }

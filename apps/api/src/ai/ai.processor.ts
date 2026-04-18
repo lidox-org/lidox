@@ -31,6 +31,7 @@ export interface AiJobData {
   taskType: AiTaskType;
   selection: string;
   language?: string;
+  stateVector?: string;
 }
 
 /**
@@ -42,7 +43,15 @@ export function startAiWorker(): Worker {
   const worker = new Worker<AiJobData>(
     'ai-tasks',
     async (job: Job<AiJobData>) => {
-      const { taskId, documentId, userId, taskType, selection, language } = job.data;
+      const {
+        taskId,
+        documentId,
+        userId,
+        taskType,
+        selection,
+        language,
+        stateVector,
+      } = job.data;
 
       logger.log(`Processing AI task ${taskId} (${taskType})`);
 
@@ -137,6 +146,8 @@ export function startAiWorker(): Worker {
             modelUsed: stream.model,
             costCents,
             selection,
+            proposalText: result,
+            sourceStateVector: stateVector,
           }),
         );
 

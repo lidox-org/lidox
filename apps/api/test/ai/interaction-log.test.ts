@@ -20,10 +20,17 @@ test('completed generations are logged as pending review, not accepted', () => {
     outputTokens: 20,
     modelUsed: 'mock',
     costCents: 1,
+    proposalText: 'Proposed replacement',
+    sourceStateVector: 'state-vector',
   });
 
   assert.equal(log.status, 'pending');
   assert.equal(log.modelUsed, 'mock');
+  assert.equal(log.sourceText, 'Original selected text');
+  assert.equal(log.proposalText, 'Proposed replacement');
+  assert.equal(log.sourceStateVector, 'state-vector');
+  assert.equal(log.appliedText, null);
+  assert.equal(log.staleAtReview, false);
   assert.ok(log.sourceTextHash);
 });
 
@@ -34,5 +41,7 @@ test('failed generations are logged as failed, not rejected by the user', () => 
   assert.equal(log.inputTokens, 0);
   assert.equal(log.outputTokens, 0);
   assert.equal(log.modelUsed, 'unknown');
+  assert.equal(log.sourceText, 'Original selected text');
+  assert.equal(log.proposalText, null);
   assert.ok(log.sourceTextHash);
 });

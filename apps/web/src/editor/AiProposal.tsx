@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   Check,
   X,
@@ -6,6 +6,8 @@ import {
   ChevronUp,
   Sparkles,
   RotateCcw,
+  Loader2,
+  AlertTriangle,
 } from 'lucide-react';
 
 interface Props {
@@ -13,7 +15,9 @@ interface Props {
   taskType: string;
   original: string;
   proposed: string;
-  onAccept: (text: string) => void;
+  streaming?: boolean;
+  stale?: boolean;
+  onAccept: (text: string, action: 'accept' | 'partial') => void;
   onReject: () => void;
   onDismiss: () => void;
 }
@@ -66,6 +70,8 @@ export function AiProposal({
   taskType,
   original,
   proposed,
+  streaming = false,
+  stale = false,
   onAccept,
   onReject,
   onDismiss,
@@ -77,6 +83,10 @@ export function AiProposal({
 
   const [segments, setSegments] = useState(initialSegments);
   const [expanded, setExpanded] = useState(true);
+
+  useEffect(() => {
+    setSegments(initialSegments);
+  }, [initialSegments]);
 
   const isReadTask = taskType === 'analyze' || taskType === 'explain';
 
@@ -92,7 +102,7 @@ export function AiProposal({
 
   const handleAcceptAll = () => {
     if (isReadTask) {
-      onDismiss();
+      onAccept(proposed, 'accept');
       return;
     }
 
@@ -101,7 +111,13 @@ export function AiProposal({
       .map((seg) => seg.text)
       .join(' ');
 
-    onAccept(result);
+    const action = segments.some(
+      (seg, index) => seg.accepted !== initialSegments[index]?.accepted,
+    )
+      ? 'partial'
+      : 'accept';
+
+    onAccept(result, action);
   };
 
   const handleRejectAll = () => {
@@ -122,7 +138,7 @@ export function AiProposal({
             AI {TASK_LABELS[taskType] || 'Suggestion'}
           </span>
           <span className="rounded-full bg-accentLight px-2 py-0.5 text-[10px] font-medium text-accent">
-            Review
+            {streaming ? 'Streaming' : stale ? 'Stale' : 'Review'}
           </span>
         </div>
         <div className="flex items-center gap-1">
@@ -149,9 +165,26 @@ export function AiProposal({
 
       {expanded && (
         <>
+          {stale && (
+            <div className="flex items-center gap-2 border-b border-yellow-200 bg-yellow-50 px-4 py-2 text-sm text-yellow-800">
+              <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+              The source text changed while this proposal was in flight. Regenerate it instead of applying it.
+            </div>
+          )}
+
           {/* Diff content */}
           <div className="max-h-64 overflow-y-auto p-4">
-            {isReadTask ? (
+            {streaming ? (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-sm font-medium text-accent">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  AI is generating a suggestion...
+                </div>
+                <div className="text-sm leading-relaxed text-ink">
+                  {proposed || 'Waiting for the first chunk...'}
+                </div>
+              </div>
+            ) : isReadTask ? (
               <div className="text-sm leading-relaxed text-ink">
                 {proposed}
               </div>
@@ -205,6 +238,7 @@ export function AiProposal({
             {!isReadTask && (
               <button
                 onClick={resetToggles}
+                disabled={streaming}
                 className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-muted hover:bg-surface hover:text-ink transition-default"
               >
                 <RotateCcw className="h-3 w-3" />
@@ -216,17 +250,19 @@ export function AiProposal({
             <div className="flex items-center gap-2">
               <button
                 onClick={handleRejectAll}
+                disabled={streaming}
                 className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted hover:bg-surface hover:text-ink transition-default"
               >
                 <X className="h-3 w-3" />
-                {isReadTask ? 'Close' : 'Reject All'}
+                {streaming ? 'Waiting...' : isReadTask ? 'Close' : 'Reject All'}
               </button>
               <button
                 onClick={handleAcceptAll}
+                disabled={streaming || stale}
                 className="flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700 transition-default"
               >
                 <Check className="h-3 w-3" />
-                {isReadTask ? 'Done' : 'Accept'}
+                {streaming ? 'Generating...' : stale ? 'Regenerate Needed' : isReadTask ? 'Done' : 'Accept'}
               </button>
             </div>
           </div>

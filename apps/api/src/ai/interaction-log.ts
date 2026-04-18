@@ -14,6 +14,8 @@ interface BaseInteractionInput {
   modelUsed: string;
   costCents: number;
   selection: string;
+  proposalText?: string;
+  sourceStateVector?: string;
 }
 
 export function buildPendingInteractionLog(
@@ -30,6 +32,11 @@ export function buildPendingInteractionLog(
     costCents: input.costCents,
     status: 'pending',
     sourceTextHash: sha256(input.selection),
+    sourceText: input.selection,
+    proposalText: input.proposalText ?? null,
+    sourceStateVector: input.sourceStateVector ?? null,
+    appliedText: null,
+    staleAtReview: false,
   };
 }
 
@@ -50,6 +57,11 @@ export function buildFailedInteractionLog(
     costCents: 0,
     status: 'failed',
     sourceTextHash: sha256(input.selection),
+    sourceText: input.selection,
+    proposalText: null,
+    sourceStateVector: null,
+    appliedText: null,
+    staleAtReview: false,
   };
 }
 

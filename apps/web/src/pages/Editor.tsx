@@ -50,6 +50,8 @@ interface AiProposalData {
   taskType: string;
   original: string;
   proposed: string;
+  streaming: boolean;
+  stale: boolean;
 }
 
 export function Editor() {
@@ -211,26 +213,54 @@ export function Editor() {
     saveTitle(docTitle);
   };
 
-  const handleAiResult = (
-    taskId: string,
-    original: string,
-    result: string,
-    taskType: string,
+  const handleAcceptProposal = async (
+    text: string,
+    action: 'accept' | 'partial',
   ) => {
-    setAiProposal({ taskId, taskType, original, proposed: result });
-  };
-
-  const handleAcceptProposal = (text: string) => {
     if (!editor || !aiProposal) return;
 
     const { from, to } = editor.state.selection;
-    if (from !== to) {
-      editor.chain().focus().deleteRange({ from, to }).insertContentAt(from, text).run();
+    const currentSelection = editor.state.doc.textBetween(from, to, ' ');
+
+    try {
+      await api(`/documents/${documentId}/ai/tasks/${aiProposal.taskId}/review`, {
+        method: 'POST',
+        body: JSON.stringify({
+          action,
+          appliedText: text,
+          currentSelection,
+        }),
+      });
+
+      if (from !== to) {
+        editor
+          .chain()
+          .focus()
+          .deleteRange({ from, to })
+          .insertContentAt(from, text)
+          .run();
+      }
+
+      setAiProposal(null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Proposal review failed';
+      if (message.toLowerCase().includes('stale')) {
+        setAiProposal((prev) => (prev ? { ...prev, stale: true, streaming: false } : prev));
+        return;
+      }
     }
-    setAiProposal(null);
   };
 
-  const handleRejectProposal = () => {
+  const handleRejectProposal = async () => {
+    if (!aiProposal) return;
+
+    await api(`/documents/${documentId}/ai/tasks/${aiProposal.taskId}/review`, {
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'reject',
+      }),
+    });
+
     setAiProposal(null);
   };
 
@@ -360,7 +390,7 @@ export function Editor() {
                 <AiToolbar
                   editor={editor}
                   documentId={documentId}
-                  onAiResult={handleAiResult}
+                  onAiProposalChange={(proposal) => setAiProposal(proposal)}
                 />
               )}
             </div>
@@ -373,6 +403,8 @@ export function Editor() {
                   taskType={aiProposal.taskType}
                   original={aiProposal.original}
                   proposed={aiProposal.proposed}
+                  streaming={aiProposal.streaming}
+                  stale={aiProposal.stale}
                   onAccept={handleAcceptProposal}
                   onReject={handleRejectProposal}
                   onDismiss={() => setAiProposal(null)}
