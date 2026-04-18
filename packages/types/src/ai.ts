@@ -16,18 +16,77 @@ export const AiTaskStatus = z.enum([
   'processing',
   'completed',
   'failed',
+  'cancelled',
   'expired',
 ]);
 export type AiTaskStatus = z.infer<typeof AiTaskStatus>;
 
 export const AiInteractionStatus = z.enum([
+  'pending',
   'accepted',
   'rejected',
   'partial',
+  'failed',
+  'cancelled',
   'expired',
-  'pending',
 ]);
 export type AiInteractionStatus = z.infer<typeof AiInteractionStatus>;
+
+export const AiTaskEventType = z.enum([
+  'queued',
+  'started',
+  'chunk',
+  'complete',
+  'failed',
+  'cancelled',
+]);
+export type AiTaskEventType = z.infer<typeof AiTaskEventType>;
+
+const AiTaskEventBaseSchema = z.object({
+  taskId: z.string().uuid(),
+});
+
+export const AiTaskQueuedEventSchema = AiTaskEventBaseSchema.extend({
+  type: z.literal('queued'),
+});
+
+export const AiTaskStartedEventSchema = AiTaskEventBaseSchema.extend({
+  type: z.literal('started'),
+  modelUsed: z.string().optional(),
+});
+
+export const AiTaskChunkEventSchema = AiTaskEventBaseSchema.extend({
+  type: z.literal('chunk'),
+  chunk: z.string().min(1),
+});
+
+export const AiTaskCompleteEventSchema = AiTaskEventBaseSchema.extend({
+  type: z.literal('complete'),
+  result: z.string(),
+  inputTokens: z.number().int().nonnegative().optional(),
+  outputTokens: z.number().int().nonnegative().optional(),
+  modelUsed: z.string().optional(),
+});
+
+export const AiTaskFailedEventSchema = AiTaskEventBaseSchema.extend({
+  type: z.literal('failed'),
+  error: z.string().min(1),
+});
+
+export const AiTaskCancelledEventSchema = AiTaskEventBaseSchema.extend({
+  type: z.literal('cancelled'),
+  reason: z.string().optional(),
+});
+
+export const AiTaskEventSchema = z.discriminatedUnion('type', [
+  AiTaskQueuedEventSchema,
+  AiTaskStartedEventSchema,
+  AiTaskChunkEventSchema,
+  AiTaskCompleteEventSchema,
+  AiTaskFailedEventSchema,
+  AiTaskCancelledEventSchema,
+]);
+export type AiTaskEvent = z.infer<typeof AiTaskEventSchema>;
 
 export const AiInvokeSchema = z.object({
   task: AiTaskType,

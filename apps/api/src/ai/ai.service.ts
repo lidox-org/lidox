@@ -15,6 +15,7 @@ import {
 } from '@lidox/types';
 import type { AiInvokeInput, AiTaskResult } from '@lidox/types';
 import type { AiJobData } from './ai.processor';
+import { createQueuedTaskResult } from './task-status';
 
 @Injectable()
 export class AiService {
@@ -63,7 +64,7 @@ export class AiService {
     // Store initial status in Redis
     await redis.set(
       `ai:task:${taskId}`,
-      JSON.stringify({ taskId, status: 'queued' }),
+      JSON.stringify(createQueuedTaskResult(taskId)),
       'EX',
       3600,
     );

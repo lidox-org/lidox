@@ -2,7 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   AiInvokeSchema,
+  AiTaskEventSchema,
   AiInteractionStatus,
+  AiTaskStatus,
   AiTaskType,
   AI_READ_TASKS,
   AI_WRITE_TASKS,
@@ -57,5 +59,31 @@ test('AI interaction status supports review-first lifecycle states', () => {
   assert.equal(statuses.has('accepted'), true);
   assert.equal(statuses.has('rejected'), true);
   assert.equal(statuses.has('partial'), true);
+  assert.equal(statuses.has('failed'), true);
+  assert.equal(statuses.has('cancelled'), true);
   assert.equal(statuses.has('expired'), true);
+});
+
+test('AI task status includes cancellation for transport lifecycle coverage', () => {
+  const statuses = new Set(AiTaskStatus.options);
+
+  assert.equal(statuses.has('queued'), true);
+  assert.equal(statuses.has('processing'), true);
+  assert.equal(statuses.has('completed'), true);
+  assert.equal(statuses.has('failed'), true);
+  assert.equal(statuses.has('cancelled'), true);
+});
+
+test('AI task event schema supports the planned streaming event model', () => {
+  const parsed = AiTaskEventSchema.parse({
+    type: 'chunk',
+    taskId: '33333333-3333-4333-8333-333333333333',
+    chunk: 'hello',
+  });
+
+  assert.deepEqual(parsed, {
+    type: 'chunk',
+    taskId: '33333333-3333-4333-8333-333333333333',
+    chunk: 'hello',
+  });
 });

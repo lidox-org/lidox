@@ -1,7 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { AiTaskType } from '@lidox/types';
-import { PROMPT_TEMPLATES } from '../../src/ai/prompts';
+import {
+  PROMPT_TEMPLATES,
+  buildPromptMessages,
+  getPromptTemplate,
+} from '../../src/ai/prompts';
 
 test('every registered AI task has a non-empty prompt template', () => {
   for (const task of AiTaskType.options) {
@@ -18,4 +22,13 @@ test('translate prompt includes the requested language', () => {
 
   assert.match(prompt, /Uzbek/);
   assert.match(prompt, /Hello world/);
+});
+
+test('prompt registry exposes lookup and message-building helpers', () => {
+  const template = getPromptTemplate('rewrite');
+  const messages = buildPromptMessages('rewrite', 'Hello world');
+
+  assert.match(template.system, /writing assistant/i);
+  assert.match(messages.system, /writing assistant/i);
+  assert.match(messages.user, /Hello world/);
 });
