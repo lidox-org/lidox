@@ -111,6 +111,7 @@ export class AiService {
         userId,
         taskType: input.task,
         selection: input.selection,
+        selectionHtml: input.selectionHtml,
         language: input.language,
         stateVector: input.stateVector,
       },

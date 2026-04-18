@@ -12,58 +12,127 @@ import {
   AlertCircle,
   Square,
 } from 'lucide-react';
+import type { AiTaskType, DocumentRole } from '@lidox/types';
+import type * as Y from 'yjs';
 import { api, getAccessToken } from '../lib/api';
+import {
+  encodeStateVector,
+  htmlToText,
+  serializeCurrentSelection,
+  type SerializedSelectionRange,
+} from './aiSelection';
 
 interface Props {
   editor: Editor | null;
   documentId: string;
+  documentRole: DocumentRole | null;
+  aiEnabled: boolean;
+  ydoc: Y.Doc | null;
   onAiProposalChange: (proposal: {
     taskId: string;
-    taskType: string;
-    original: string;
-    proposed: string;
+    taskType: AiTaskType;
+    originalText: string;
+    originalHtml: string;
+    proposedText: string;
+    proposedHtml: string;
+    anchorFrom: number;
+    anchorTo: number;
+    sourceStateVector?: string;
+    readOnly: boolean;
     streaming: boolean;
     stale: boolean;
   } | null) => void;
 }
 
-type AiTask = 'rewrite' | 'summarize' | 'translate' | 'grammar' | 'analyze' | 'explain';
-
-const AI_ACTIONS: { task: AiTask; label: string; icon: React.ReactNode }[] = [
-  { task: 'rewrite', label: 'Rewrite', icon: <Wand2 className="h-3.5 w-3.5" /> },
-  { task: 'summarize', label: 'Summarize', icon: <FileText className="h-3.5 w-3.5" /> },
-  { task: 'translate', label: 'Translate', icon: <Languages className="h-3.5 w-3.5" /> },
-  { task: 'grammar', label: 'Grammar Fix', icon: <SpellCheck className="h-3.5 w-3.5" /> },
-  { task: 'analyze', label: 'Analyze', icon: <BarChart3 className="h-3.5 w-3.5" /> },
-  { task: 'explain', label: 'Explain', icon: <HelpCircle className="h-3.5 w-3.5" /> },
+const AI_ACTIONS: {
+  task: AiTaskType;
+  label: string;
+  icon: React.ReactNode;
+  minRole: 'editor' | 'commenter';
+}[] = [
+  {
+    task: 'rewrite',
+    label: 'Rewrite',
+    icon: <Wand2 className="h-3.5 w-3.5" />,
+    minRole: 'editor',
+  },
+  {
+    task: 'summarize',
+    label: 'Summarize',
+    icon: <FileText className="h-3.5 w-3.5" />,
+    minRole: 'editor',
+  },
+  {
+    task: 'translate',
+    label: 'Translate',
+    icon: <Languages className="h-3.5 w-3.5" />,
+    minRole: 'editor',
+  },
+  {
+    task: 'grammar',
+    label: 'Grammar Fix',
+    icon: <SpellCheck className="h-3.5 w-3.5" />,
+    minRole: 'editor',
+  },
+  {
+    task: 'restructure',
+    label: 'Restructure',
+    icon: <Wand2 className="h-3.5 w-3.5" />,
+    minRole: 'editor',
+  },
+  {
+    task: 'analyze',
+    label: 'Analyze',
+    icon: <BarChart3 className="h-3.5 w-3.5" />,
+    minRole: 'commenter',
+  },
+  {
+    task: 'explain',
+    label: 'Explain',
+    icon: <HelpCircle className="h-3.5 w-3.5" />,
+    minRole: 'commenter',
+  },
 ];
 
-export function AiToolbar({ editor, documentId, onAiProposalChange }: Props) {
+export function AiToolbar({
+  editor,
+  documentId,
+  documentRole,
+  aiEnabled,
+  ydoc,
+  onAiProposalChange,
+}: Props) {
   const [visible, setVisible] = useState(false);
   const [position, setPosition] = useState({ top: 0, left: 0 });
-  const [loading, setLoading] = useState<AiTask | null>(null);
+  const [loading, setLoading] = useState<AiTaskType | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
-  const selectedTextRef = useRef('');
+  const selectedRangeRef = useRef<SerializedSelectionRange | null>(null);
   const rafRef = useRef<number>();
+  const availableActions = AI_ACTIONS.filter((action) =>
+    isActionAvailable(action.minRole, documentRole, aiEnabled),
+  );
 
   const computePosition = useCallback(() => {
     if (!editor) return;
-
-    const { from, to, empty } = editor.state.selection;
-    if (empty) {
+    if (availableActions.length === 0) {
       setVisible(false);
       return;
     }
 
-    const text = editor.state.doc.textBetween(from, to, ' ');
-    if (text.trim().length < 3) {
+    const selection = serializeCurrentSelection(editor);
+    if (!selection) {
       setVisible(false);
       return;
     }
 
-    selectedTextRef.current = text;
+    if (selection.text.trim().length < 3) {
+      setVisible(false);
+      return;
+    }
+
+    selectedRangeRef.current = selection;
 
     // Use RAF so DOM selection is up-to-date
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
@@ -90,7 +159,7 @@ export function AiToolbar({ editor, documentId, onAiProposalChange }: Props) {
       setPosition({ top, left });
       setVisible(true);
     });
-  }, [editor]);
+  }, [availableActions.length, editor]);
 
   useEffect(() => {
     if (!editor) return;
@@ -120,34 +189,60 @@ export function AiToolbar({ editor, documentId, onAiProposalChange }: Props) {
     };
   }, [editor, computePosition, loading]);
 
-  const handleAction = async (task: AiTask) => {
-    const selection = selectedTextRef.current;
-    if (!selection.trim()) return;
+  const handleAction = async (task: AiTaskType) => {
+    const selection = selectedRangeRef.current;
+    if (!selection || !selection.text.trim()) return;
 
     setLoading(task);
     setError(null);
 
+    const sourceStateVector = encodeStateVector(ydoc);
+    const readOnly = isReadTask(task);
+
     try {
       const response = await api<{ taskId: string }>(`/documents/${documentId}/ai/invoke`, {
         method: 'POST',
-        body: JSON.stringify({ task, selection }),
+        body: JSON.stringify({
+          task,
+          selection: selection.text,
+          selectionHtml: isWriteTask(task) ? selection.html : undefined,
+          stateVector: sourceStateVector,
+        }),
       });
       setActiveTaskId(response.taskId);
       onAiProposalChange({
         taskId: response.taskId,
         taskType: task,
-        original: selection,
-        proposed: '',
+        originalText: selection.text,
+        originalHtml: selection.html,
+        proposedText: '',
+        proposedHtml: '',
+        anchorFrom: selection.from,
+        anchorTo: selection.to,
+        sourceStateVector,
+        readOnly,
         streaming: true,
         stale: false,
       });
 
-      const result = await streamTask(response.taskId, selection, task);
+      const result = await streamTask(
+        response.taskId,
+        selection,
+        task,
+        sourceStateVector,
+      );
+      const proposedText = toPreviewText(task, result);
       onAiProposalChange({
         taskId: response.taskId,
         taskType: task,
-        original: selection,
-        proposed: result,
+        originalText: selection.text,
+        originalHtml: selection.html,
+        proposedText,
+        proposedHtml: isWriteTask(task) ? result : '',
+        anchorFrom: selection.from,
+        anchorTo: selection.to,
+        sourceStateVector,
+        readOnly,
         streaming: false,
         stale: false,
       });
@@ -185,8 +280,9 @@ export function AiToolbar({ editor, documentId, onAiProposalChange }: Props) {
 
   const streamTask = async (
     taskId: string,
-    original: string,
-    taskType: AiTask,
+    original: SerializedSelectionRange,
+    taskType: AiTaskType,
+    sourceStateVector?: string,
   ): Promise<string> => {
     const headers = new Headers({
       Accept: 'text/event-stream',
@@ -241,8 +337,14 @@ export function AiToolbar({ editor, documentId, onAiProposalChange }: Props) {
           onAiProposalChange({
             taskId,
             taskType,
-            original,
-            proposed: result,
+            originalText: original.text,
+            originalHtml: original.html,
+            proposedText: toPreviewText(taskType, result),
+            proposedHtml: isWriteTask(taskType) ? result : '',
+            anchorFrom: original.from,
+            anchorTo: original.to,
+            sourceStateVector,
+            readOnly: isReadTask(taskType),
             streaming: true,
             stale: false,
           });
@@ -266,7 +368,7 @@ export function AiToolbar({ editor, documentId, onAiProposalChange }: Props) {
     return result;
   };
 
-  if (!visible) return null;
+  if (!visible || availableActions.length === 0) return null;
 
   return (
     <div
@@ -282,7 +384,7 @@ export function AiToolbar({ editor, documentId, onAiProposalChange }: Props) {
             <span className="text-[11px] font-semibold text-accent">AI</span>
           </div>
 
-          {AI_ACTIONS.map(({ task, label, icon }) => (
+          {availableActions.map(({ task, label, icon }) => (
             <button
               key={task}
               onClick={() => handleAction(task)}
@@ -341,4 +443,36 @@ function parseSseEvent(rawEvent: string): { event?: string; data?: string } | nu
     event: eventLine ? eventLine.slice(6).trim() : undefined,
     data: dataLines.join('\n'),
   };
+}
+
+function isActionAvailable(
+  minRole: 'editor' | 'commenter',
+  documentRole: DocumentRole | null,
+  aiEnabled: boolean,
+): boolean {
+  if (!aiEnabled || !documentRole || documentRole === 'viewer') {
+    return false;
+  }
+
+  if (minRole === 'commenter') {
+    return documentRole === 'owner' || documentRole === 'editor' || documentRole === 'commenter';
+  }
+
+  return documentRole === 'owner' || documentRole === 'editor';
+}
+
+function isReadTask(task: AiTaskType): boolean {
+  return task === 'analyze' || task === 'explain';
+}
+
+function isWriteTask(task: AiTaskType): boolean {
+  return !isReadTask(task);
+}
+
+function toPreviewText(task: AiTaskType, content: string): string {
+  if (isReadTask(task)) {
+    return content;
+  }
+
+  return htmlToText(content);
 }

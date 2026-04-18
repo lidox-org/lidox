@@ -6,6 +6,7 @@ import { buildPromptMessages } from './prompt-registry';
 export interface AiProviderRequest {
   taskType: AiTaskType;
   selection: string;
+  selectionHtml?: string;
   language?: string;
 }
 
@@ -85,6 +86,7 @@ export class GroqAiProviderAdapter implements AiProviderAdapter {
     const { system, user } = buildPromptMessages(
       request.taskType,
       request.selection,
+      request.selectionHtml,
       request.language,
     );
     const model = MODEL_FOR_TASK[request.taskType] ?? this.defaultModel;

@@ -30,6 +30,7 @@ export interface AiJobData {
   userId: string;
   taskType: AiTaskType;
   selection: string;
+  selectionHtml?: string;
   language?: string;
   stateVector?: string;
 }
@@ -49,6 +50,7 @@ export function startAiWorker(): Worker {
         userId,
         taskType,
         selection,
+        selectionHtml,
         language,
         stateVector,
       } = job.data;
@@ -62,6 +64,7 @@ export function startAiWorker(): Worker {
         const stream = await provider.stream({
           taskType,
           selection,
+          selectionHtml,
           language,
         });
 

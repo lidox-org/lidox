@@ -18,6 +18,7 @@ test('AI invoke schema accepts orchestration metadata needed by the spec', () =>
   const parsed = AiInvokeSchema.parse({
     task: 'rewrite',
     selection: 'Selected text',
+    selectionHtml: '<p><strong>Selected</strong> text</p>',
     nodeId: 'paragraph-12',
     stateVector: 'encoded-state-vector',
     language: 'French',
@@ -26,6 +27,7 @@ test('AI invoke schema accepts orchestration metadata needed by the spec', () =>
   assert.deepEqual(parsed, {
     task: 'rewrite',
     selection: 'Selected text',
+    selectionHtml: '<p><strong>Selected</strong> text</p>',
     nodeId: 'paragraph-12',
     stateVector: 'encoded-state-vector',
     language: 'French',

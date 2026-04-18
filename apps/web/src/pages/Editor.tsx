@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useEditor, EditorContent } from '@tiptap/react';
+import type { AiTaskType, DocumentRole } from '@lidox/types';
 import StarterKit from '@tiptap/starter-kit';
 import Collaboration from '@tiptap/extension-collaboration';
 import CollaborationCursor from '@tiptap/extension-collaboration-cursor';
@@ -30,6 +31,7 @@ import {
 import { EditorToolbar } from '../editor/EditorToolbar';
 import { AiToolbar } from '../editor/AiToolbar';
 import { AiProposal } from '../editor/AiProposal';
+import { encodeStateVector, serializeRange } from '../editor/aiSelection';
 import { PresenceCursors } from '../editor/PresenceCursors';
 import { ShareDialog } from '../editor/ShareDialog';
 import { VersionHistory } from '../editor/VersionHistory';
@@ -47,9 +49,15 @@ const CURSOR_COLORS = [
 
 interface AiProposalData {
   taskId: string;
-  taskType: string;
-  original: string;
-  proposed: string;
+  taskType: AiTaskType;
+  originalText: string;
+  originalHtml: string;
+  proposedText: string;
+  proposedHtml: string;
+  anchorFrom: number;
+  anchorTo: number;
+  sourceStateVector?: string;
+  readOnly: boolean;
   streaming: boolean;
   stale: boolean;
 }
@@ -60,6 +68,8 @@ export function Editor() {
   const user = useAuth((s) => s.user);
 
   const [docTitle, setDocTitle] = useState('Untitled Document');
+  const [documentRole, setDocumentRole] = useState<DocumentRole | null>(null);
+  const [aiEnabled, setAiEnabled] = useState(true);
   const [titleEditing, setTitleEditing] = useState(false);
   const [connected, setConnected] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -113,8 +123,15 @@ export function Editor() {
 
     const fetchDoc = async () => {
       try {
-        const doc = await api<{ id: string; title: string }>(`/documents/${documentId}`);
+        const doc = await api<{
+          id: string;
+          title: string;
+          role: DocumentRole;
+          aiEnabled: boolean;
+        }>(`/documents/${documentId}`);
         setDocTitle(doc.title);
+        setDocumentRole(doc.role);
+        setAiEnabled(doc.aiEnabled);
       } catch {
         navigate('/dashboard');
       } finally {
@@ -214,30 +231,45 @@ export function Editor() {
   };
 
   const handleAcceptProposal = async (
-    text: string,
-    action: 'accept' | 'partial',
+    input: {
+      text: string;
+      html?: string;
+      action: 'accept' | 'partial';
+    },
   ) => {
     if (!editor || !aiProposal) return;
 
-    const { from, to } = editor.state.selection;
-    const currentSelection = editor.state.doc.textBetween(from, to, ' ');
+    const currentSelection = serializeRange(
+      editor,
+      aiProposal.anchorFrom,
+      aiProposal.anchorTo,
+    );
+    const currentStateVector = encodeStateVector(ydoc);
+    const appliedContent =
+      input.action === 'accept' && aiProposal.proposedHtml
+        ? aiProposal.proposedHtml
+        : (input.html ?? input.text);
 
     try {
       await api(`/documents/${documentId}/ai/tasks/${aiProposal.taskId}/review`, {
         method: 'POST',
         body: JSON.stringify({
-          action,
-          appliedText: text,
-          currentSelection,
+          action: input.action,
+          appliedText: aiProposal.readOnly ? aiProposal.proposedText : appliedContent,
+          currentSelection: currentSelection?.text,
+          currentStateVector,
         }),
       });
 
-      if (from !== to) {
+      if (!aiProposal.readOnly && currentSelection) {
         editor
           .chain()
           .focus()
-          .deleteRange({ from, to })
-          .insertContentAt(from, text)
+          .deleteRange({
+            from: aiProposal.anchorFrom,
+            to: aiProposal.anchorTo,
+          })
+          .insertContentAt(aiProposal.anchorFrom, appliedContent)
           .run();
       }
 
@@ -390,6 +422,9 @@ export function Editor() {
                 <AiToolbar
                   editor={editor}
                   documentId={documentId}
+                  documentRole={documentRole}
+                  aiEnabled={aiEnabled}
+                  ydoc={ydoc}
                   onAiProposalChange={(proposal) => setAiProposal(proposal)}
                 />
               )}
@@ -401,8 +436,10 @@ export function Editor() {
                 <AiProposal
                   taskId={aiProposal.taskId}
                   taskType={aiProposal.taskType}
-                  original={aiProposal.original}
-                  proposed={aiProposal.proposed}
+                  original={aiProposal.originalText}
+                  proposed={aiProposal.proposedText}
+                  proposedHtml={aiProposal.proposedHtml}
+                  readOnly={aiProposal.readOnly}
                   streaming={aiProposal.streaming}
                   stale={aiProposal.stale}
                   onAccept={handleAcceptProposal}

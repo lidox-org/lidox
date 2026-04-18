@@ -91,6 +91,7 @@ export type AiTaskEvent = z.infer<typeof AiTaskEventSchema>;
 export const AiInvokeSchema = z.object({
   task: AiTaskType,
   selection: z.string().min(1).max(50000),
+  selectionHtml: z.string().min(1).max(100000).optional(),
   nodeId: z.string().optional(),
   stateVector: z.string().optional(),
   language: z.string().optional(),

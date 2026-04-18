@@ -1,3 +1,4 @@
+import type { AiTaskType } from '@lidox/types';
 import { useState, useMemo, useEffect } from 'react';
 import {
   Check,
@@ -12,12 +13,18 @@ import {
 
 interface Props {
   taskId: string;
-  taskType: string;
+  taskType: AiTaskType;
   original: string;
   proposed: string;
+  proposedHtml?: string;
+  readOnly?: boolean;
   streaming?: boolean;
   stale?: boolean;
-  onAccept: (text: string, action: 'accept' | 'partial') => void;
+  onAccept: (input: {
+    text: string;
+    html?: string;
+    action: 'accept' | 'partial';
+  }) => void;
   onReject: () => void;
   onDismiss: () => void;
 }
@@ -62,6 +69,7 @@ const TASK_LABELS: Record<string, string> = {
   summarize: 'Summary',
   translate: 'Translation',
   grammar: 'Grammar Fix',
+  restructure: 'Restructure',
   analyze: 'Analysis',
   explain: 'Explanation',
 };
@@ -70,6 +78,8 @@ export function AiProposal({
   taskType,
   original,
   proposed,
+  proposedHtml,
+  readOnly = false,
   streaming = false,
   stale = false,
   onAccept,
@@ -88,7 +98,7 @@ export function AiProposal({
     setSegments(initialSegments);
   }, [initialSegments]);
 
-  const isReadTask = taskType === 'analyze' || taskType === 'explain';
+  const isReadTask = readOnly || taskType === 'analyze' || taskType === 'explain';
 
   const toggleSegment = (segId: number) => {
     setSegments((prev) =>
@@ -102,7 +112,7 @@ export function AiProposal({
 
   const handleAcceptAll = () => {
     if (isReadTask) {
-      onAccept(proposed, 'accept');
+      onAccept({ text: proposed, action: 'accept' });
       return;
     }
 
@@ -117,7 +127,11 @@ export function AiProposal({
       ? 'partial'
       : 'accept';
 
-    onAccept(result, action);
+    onAccept({
+      text: result,
+      html: action === 'accept' ? proposedHtml : undefined,
+      action,
+    });
   };
 
   const handleRejectAll = () => {
