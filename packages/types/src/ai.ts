@@ -105,6 +105,12 @@ export const AiInvokeResponseSchema = z.object({
 
 export type AiInvokeResponse = z.infer<typeof AiInvokeResponseSchema>;
 
+export const AiCancelResponseSchema = z.object({
+  taskId: z.string().uuid(),
+  status: z.enum(['cancelling', 'cancelled']),
+});
+export type AiCancelResponse = z.infer<typeof AiCancelResponseSchema>;
+
 export const AiTaskResultSchema = z.object({
   taskId: z.string().uuid(),
   status: AiTaskStatus,
@@ -116,6 +122,14 @@ export const AiTaskResultSchema = z.object({
 });
 
 export type AiTaskResult = z.infer<typeof AiTaskResultSchema>;
+
+export const AiTaskMetadataSchema = z.object({
+  taskId: z.string().uuid(),
+  documentId: z.string().uuid(),
+  userId: z.string().uuid(),
+  taskType: AiTaskType,
+});
+export type AiTaskMetadata = z.infer<typeof AiTaskMetadataSchema>;
 
 export const AI_WRITE_TASKS: AiTaskType[] = ['rewrite', 'summarize', 'translate', 'grammar', 'restructure'];
 export const AI_READ_TASKS: AiTaskType[] = ['analyze', 'explain'];

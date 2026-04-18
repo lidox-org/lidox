@@ -15,9 +15,11 @@ test('task-status helpers create stable queued and processing snapshots', () => 
     status: 'queued',
   });
 
-  assert.deepEqual(createProcessingTaskResult(TASK_ID), {
+  assert.deepEqual(createProcessingTaskResult({ taskId: TASK_ID }), {
     taskId: TASK_ID,
     status: 'processing',
+    result: undefined,
+    modelUsed: undefined,
   });
 });
 

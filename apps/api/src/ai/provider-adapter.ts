@@ -16,8 +16,15 @@ export interface AiProviderResponse {
   model: string;
 }
 
+export interface AiProviderStream {
+  model: string;
+  inputTokens: number;
+  chunks: AsyncIterable<string>;
+}
+
 export interface AiProviderAdapter {
   generate(request: AiProviderRequest): Promise<AiProviderResponse>;
+  stream(request: AiProviderRequest): Promise<AiProviderStream>;
 }
 
 const MODEL_FOR_TASK: Record<AiTaskType, string> = {
@@ -59,15 +66,31 @@ export class GroqAiProviderAdapter implements AiProviderAdapter {
   ) {}
 
   async generate(request: AiProviderRequest): Promise<AiProviderResponse> {
+    const stream = await this.stream(request);
+    let result = '';
+
+    for await (const chunk of stream.chunks) {
+      result += chunk;
+    }
+
+    return {
+      result,
+      inputTokens: stream.inputTokens,
+      outputTokens: estimateTokenCount(result),
+      model: stream.model,
+    };
+  }
+
+  async stream(request: AiProviderRequest): Promise<AiProviderStream> {
     const { system, user } = buildPromptMessages(
       request.taskType,
       request.selection,
       request.language,
     );
     const model = MODEL_FOR_TASK[request.taskType] ?? this.defaultModel;
+    const inputTokens = estimateTokenCount(`${system}\n${user}`);
 
     if (!this.apiKey) {
-      await new Promise((resolve) => setTimeout(resolve, 800));
       const result = getMockResponse(
         request.taskType,
         request.selection,
@@ -75,14 +98,13 @@ export class GroqAiProviderAdapter implements AiProviderAdapter {
       );
 
       return {
-        result,
-        inputTokens: Math.ceil((system.length + user.length) / 4),
-        outputTokens: Math.ceil(result.length / 4),
         model: 'mock',
+        inputTokens,
+        chunks: streamMockResponse(result),
       };
     }
 
-    const completion = await this.getClient().chat.completions.create({
+    const responseStream = await this.getClient().chat.completions.create({
       model,
       messages: [
         { role: 'system', content: system },
@@ -90,13 +112,13 @@ export class GroqAiProviderAdapter implements AiProviderAdapter {
       ],
       max_tokens: 2048,
       temperature: 0.7,
+      stream: true,
     });
 
     return {
-      result: completion.choices[0]?.message?.content ?? '',
-      inputTokens: completion.usage?.prompt_tokens ?? 0,
-      outputTokens: completion.usage?.completion_tokens ?? 0,
       model,
+      inputTokens,
+      chunks: streamGroqResponse(responseStream),
     };
   }
 
@@ -111,4 +133,32 @@ export class GroqAiProviderAdapter implements AiProviderAdapter {
 
 export function createDefaultAiProvider(): AiProviderAdapter {
   return new GroqAiProviderAdapter();
+}
+
+async function* streamMockResponse(
+  result: string,
+): AsyncIterable<string> {
+  const chunkSize = 24;
+
+  for (let index = 0; index < result.length; index += chunkSize) {
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    yield result.slice(index, index + chunkSize);
+  }
+}
+
+async function* streamGroqResponse(
+  stream: Awaited<ReturnType<Groq['chat']['completions']['create']>>,
+): AsyncIterable<string> {
+  for await (const chunk of stream as AsyncIterable<{
+    choices?: Array<{ delta?: { content?: string | null } }>;
+  }>) {
+    const content = chunk.choices?.[0]?.delta?.content;
+    if (content) {
+      yield content;
+    }
+  }
+}
+
+function estimateTokenCount(text: string): number {
+  return Math.ceil(text.length / 4);
 }

@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   NotFoundException,
   Logger,
+  ConflictException,
 } from '@nestjs/common';
 import { Queue } from 'bullmq';
 import { v4 as uuidv4 } from 'uuid';
@@ -13,9 +14,25 @@ import {
   AI_WRITE_TASKS,
   AI_READ_TASKS,
 } from '@lidox/types';
-import type { AiInvokeInput, AiTaskResult } from '@lidox/types';
+import type {
+  AiCancelResponse,
+  AiInvokeInput,
+  AiTaskResult,
+} from '@lidox/types';
 import type { AiJobData } from './ai.processor';
-import { createQueuedTaskResult } from './task-status';
+import { createAiTaskEventStream, publishAiTaskEvent } from './ai-event-bus';
+import {
+  clearAiTaskCancellationRequest,
+  getAiTaskMetadata,
+  getAiTaskStatus,
+  requestAiTaskCancellation,
+  storeAiTaskMetadata,
+  storeAiTaskStatus,
+} from './task-store';
+import {
+  createCancelledTaskResult,
+  createQueuedTaskResult,
+} from './task-status';
 
 @Injectable()
 export class AiService {
@@ -60,45 +77,140 @@ export class AiService {
 
     // Create task
     const taskId = uuidv4();
+    const queuedTask = createQueuedTaskResult(taskId);
 
     // Store initial status in Redis
-    await redis.set(
-      `ai:task:${taskId}`,
-      JSON.stringify(createQueuedTaskResult(taskId)),
-      'EX',
-      3600,
-    );
-
-    // Dispatch BullMQ job
-    await this.queue.add('process', {
+    await storeAiTaskStatus(queuedTask);
+    await storeAiTaskMetadata({
       taskId,
       documentId: docId,
       userId,
       taskType: input.task,
-      selection: input.selection,
-      language: input.language,
     });
+    await publishAiTaskEvent({
+      type: 'queued',
+      taskId,
+    });
+
+    // Dispatch BullMQ job
+    await this.queue.add(
+      'process',
+      {
+        taskId,
+        documentId: docId,
+        userId,
+        taskType: input.task,
+        selection: input.selection,
+        language: input.language,
+      },
+      {
+        jobId: taskId,
+      },
+    );
 
     this.logger.log(`AI task ${taskId} queued (${input.task})`);
 
     return { taskId, status: 'queued' as const };
   }
 
+  streamTask(docId: string, taskId: string, userId: string) {
+    return this.withAuthorizedTask(docId, taskId, userId, async () =>
+      createAiTaskEventStream(taskId),
+    );
+  }
+
+  async cancelTask(
+    docId: string,
+    taskId: string,
+    userId: string,
+  ): Promise<AiCancelResponse> {
+    return this.withAuthorizedTask(docId, taskId, userId, async () => {
+      const task = await getAiTaskStatus(taskId);
+      if (!task) {
+        throw new NotFoundException('Task not found or expired');
+      }
+
+      if (
+        task.status === 'completed' ||
+        task.status === 'failed' ||
+        task.status === 'expired'
+      ) {
+        throw new ConflictException(
+          `Cannot cancel a task in ${task.status} state`,
+        );
+      }
+
+      if (task.status === 'cancelled') {
+        return {
+          taskId,
+          status: 'cancelled',
+        };
+      }
+
+      await requestAiTaskCancellation(taskId);
+
+      const job = await this.queue.getJob(taskId);
+      const state = job ? await job.getState() : null;
+
+      if (job && (state === 'waiting' || state === 'delayed')) {
+        await job.remove();
+        await clearAiTaskCancellationRequest(taskId);
+
+        const cancelledTask = createCancelledTaskResult(
+          taskId,
+          'Cancelled before generation started',
+        );
+        await storeAiTaskStatus(cancelledTask);
+        await publishAiTaskEvent({
+          type: 'cancelled',
+          taskId,
+          reason: 'Cancelled before generation started',
+        });
+
+        return {
+          taskId,
+          status: 'cancelled',
+        };
+      }
+
+      return {
+        taskId,
+        status: 'cancelling',
+      };
+    });
+  }
+
   /* ---------------------------------------------------------------- */
   /*  Get task status                                                  */
   /* ---------------------------------------------------------------- */
   async getTaskStatus(docId: string, taskId: string, userId: string): Promise<AiTaskResult> {
+    return this.withAuthorizedTask(docId, taskId, userId, async () => {
+      const cached = await getAiTaskStatus(taskId);
+      if (!cached) {
+        throw new NotFoundException('Task not found or expired');
+      }
+
+      return cached;
+    });
+  }
+
+  private async withAuthorizedTask<T>(
+    docId: string,
+    taskId: string,
+    userId: string,
+    action: () => Promise<T>,
+  ): Promise<T> {
     // Verify user has access to the document
     const role = await this.documentsService.getUserRole(docId, userId);
     if (!role) {
       throw new ForbiddenException('No access to this document');
     }
 
-    const cached = await redis.get(`ai:task:${taskId}`);
-    if (!cached) {
+    const metadata = await getAiTaskMetadata(taskId);
+    if (!metadata || metadata.documentId !== docId) {
       throw new NotFoundException('Task not found or expired');
     }
 
-    return JSON.parse(cached) as AiTaskResult;
+    return action();
   }
 }
