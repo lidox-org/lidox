@@ -49,11 +49,11 @@ export class AiService {
     const isWriteTask = (AI_WRITE_TASKS as readonly string[]).includes(input.task);
     const isReadTask = (AI_READ_TASKS as readonly string[]).includes(input.task);
 
-    if (isWriteTask && ROLE_HIERARCHY[role] < ROLE_HIERARCHY['editor']) {
+    if (isWriteTask && ROLE_HIERARCHY[role] < ROLE_HIERARCHY.editor) {
       throw new ForbiddenException('Editor access required for write AI tasks');
     }
 
-    if (isReadTask && ROLE_HIERARCHY[role] < ROLE_HIERARCHY['commenter']) {
+    if (isReadTask && ROLE_HIERARCHY[role] < ROLE_HIERARCHY.commenter) {
       throw new ForbiddenException('Commenter access required for read AI tasks');
     }
 

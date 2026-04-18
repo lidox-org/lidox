@@ -1,5 +1,5 @@
 import * as dotenv from 'dotenv';
-import * as path from 'path';
+import * as path from 'node:path';
 
 // Load .env from monorepo root
 dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
@@ -15,5 +15,5 @@ export const config = {
   JWT_SECRET: process.env.JWT_SECRET || 'change-me-in-production',
 
   /** Port the sync server listens on */
-  SYNC_PORT: parseInt(process.env.SYNC_PORT || '3002', 10),
+  SYNC_PORT: Number.parseInt(process.env.SYNC_PORT || '3002', 10),
 } as const;

@@ -1,6 +1,5 @@
 import * as Y from 'yjs';
 import { HocuspocusProvider } from '@hocuspocus/provider';
-import { getAccessToken } from './api';
 
 // Derive the WebSocket URL from current page hostname so it works in any environment
 function getSyncUrl(): string {
@@ -25,13 +24,11 @@ export function getOrCreateProvider(documentId: string): HocuspocusProvider {
   if (existing) return existing;
 
   const doc = getOrCreateDoc(documentId);
-  const token = getAccessToken() ?? undefined;
 
   const provider = new HocuspocusProvider({
     url: getSyncUrl(),
     name: documentId,
     document: doc,
-    token,
     // Reconnect automatically on disconnect
     broadcast: false,
     onConnect: () => {

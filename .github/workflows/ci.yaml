@@ -1,31 +1,80 @@
-name: CI (Lint, Typecheck & Build)
+name: CI
 
 on:
   pull_request:
     branches: ["main"]
 
 jobs:
-  build-lint-test:
-    name: Build, Lint, and Typecheck
+  lint-and-typecheck:
+    name: Lint and Typecheck
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: "20"
-          cache: 'npm' # or 'pnpm' / 'yarn'
+          node-version-file: ".node-version"
+          cache: "npm"
 
-      - name: Install dependencies
-        run: npm install
+      - run: corepack enable
 
-      - name: Lint (Biome)
-        run: npm run lint
+      - run: corepack npm ci
 
-      - name: Typecheck
-        run: npm run typecheck
+      - run: corepack npm run lint
 
-      - name: Build
-        run: npm run build
+      - run: corepack npm run typecheck
+
+  tests:
+    name: Unit and Integration Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: ".node-version"
+          cache: "npm"
+
+      - run: corepack enable
+
+      - run: corepack npm ci
+
+      - run: corepack npm run test:unit
+
+      - run: corepack npm run test:integration
+
+  e2e:
+    name: E2E Smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: ".node-version"
+          cache: "npm"
+
+      - run: corepack enable
+
+      - run: corepack npm ci
+
+      - run: corepack npm run test:e2e:install
+
+      - run: corepack npm run test:e2e
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: ".node-version"
+          cache: "npm"
+
+      - run: corepack enable
+
+      - run: corepack npm ci
+
+      - run: corepack npm run build

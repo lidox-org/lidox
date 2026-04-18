@@ -1,18 +1,11 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
-import { Strategy, ExtractJwt } from 'passport-jwt';
+import { Strategy } from 'passport-jwt';
 import { Request } from 'express';
 import { env } from '../config/env';
 import { AuthService } from './auth.service';
 
-/**
- * Extract JWT from Authorization header first, fall back to cookie.
- */
 function extractJwtFromRequest(req: Request): string | null {
-  const fromHeader = ExtractJwt.fromAuthHeaderAsBearerToken()(req);
-  if (fromHeader) return fromHeader;
-
-  // Fall back to cookie
   if (req.cookies?.access_token) {
     return req.cookies.access_token;
   }

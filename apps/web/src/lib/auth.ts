@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { api, setAccessToken } from './api';
+import { api } from './api';
 
 interface AuthUser {
   id: string;
@@ -10,7 +10,6 @@ interface AuthUser {
 
 interface AuthState {
   user: AuthUser | null;
-  token: string | null;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, name: string) => Promise<void>;
@@ -21,11 +20,10 @@ interface AuthState {
 
 export const useAuth = create<AuthState>((set) => ({
   user: null,
-  token: null,
   isLoading: true,
 
   login: async (email: string, password: string) => {
-    const data = await api<{ user: AuthUser; accessToken: string }>(
+    const data = await api<{ user: AuthUser }>(
       '/auth/login',
       {
         method: 'POST',
@@ -33,12 +31,11 @@ export const useAuth = create<AuthState>((set) => ({
         skipAuth: true,
       },
     );
-    setAccessToken(data.accessToken);
-    set({ user: data.user, token: data.accessToken, isLoading: false });
+    set({ user: data.user, isLoading: false });
   },
 
   register: async (email: string, password: string, name: string) => {
-    const data = await api<{ user: AuthUser; accessToken: string }>(
+    const data = await api<{ user: AuthUser }>(
       '/auth/register',
       {
         method: 'POST',
@@ -46,38 +43,28 @@ export const useAuth = create<AuthState>((set) => ({
         skipAuth: true,
       },
     );
-    setAccessToken(data.accessToken);
-    set({ user: data.user, token: data.accessToken, isLoading: false });
+    set({ user: data.user, isLoading: false });
   },
 
   logout: () => {
     api('/auth/logout', { method: 'POST' }).catch(() => {});
-    setAccessToken(null);
-    set({ user: null, token: null, isLoading: false });
+    set({ user: null, isLoading: false });
   },
 
   setUser: (user: AuthUser) => set({ user }),
 
   refresh: async () => {
     try {
-      const data = await api<{ accessToken: string; user?: AuthUser }>(
+      const data = await api<{ user: AuthUser }>(
         '/auth/refresh',
         {
           method: 'POST',
           skipAuth: true,
         },
       );
-      setAccessToken(data.accessToken);
-
-      if (data.user) {
-        set({ user: data.user, token: data.accessToken, isLoading: false });
-      } else {
-        const me = await api<AuthUser>('/auth/me');
-        set({ user: me, token: data.accessToken, isLoading: false });
-      }
+      set({ user: data.user, isLoading: false });
     } catch {
-      setAccessToken(null);
-      set({ user: null, token: null, isLoading: false });
+      set({ user: null, isLoading: false });
     }
   },
 }));

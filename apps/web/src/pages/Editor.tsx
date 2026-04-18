@@ -33,6 +33,7 @@ import { AiProposal } from '../editor/AiProposal';
 import { PresenceCursors } from '../editor/PresenceCursors';
 import { ShareDialog } from '../editor/ShareDialog';
 import { VersionHistory } from '../editor/VersionHistory';
+import type { DocumentRole } from '@lidox/types';
 
 const CURSOR_COLORS = [
   '#EF4444',
@@ -65,6 +66,7 @@ export function Editor() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [aiProposal, setAiProposal] = useState<AiProposalData | null>(null);
   const [saving, setSaving] = useState(false);
+  const [role, setRole] = useState<DocumentRole>('viewer');
 
   const titleInputRef = useRef<HTMLInputElement>(null);
   const saveTitleTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
@@ -111,8 +113,11 @@ export function Editor() {
 
     const fetchDoc = async () => {
       try {
-        const doc = await api<{ id: string; title: string }>(`/documents/${documentId}`);
+        const doc = await api<{ id: string; title: string; role: DocumentRole }>(
+          `/documents/${documentId}`,
+        );
         setDocTitle(doc.title);
+        setRole(doc.role);
       } catch {
         navigate('/dashboard');
       } finally {
@@ -177,8 +182,9 @@ export function Editor() {
           class: 'focus:outline-none',
         },
       },
+      editable: role === 'owner' || role === 'editor',
     },
-    [ydoc],
+    [role, ydoc],
   );
 
   const saveTitle = useCallback(
