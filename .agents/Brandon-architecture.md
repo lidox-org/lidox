@@ -20,13 +20,24 @@ Keep Assignment 2 aligned with Assignment 1 where possible, and make every devia
   - JWT lifecycle
   - collaboration transport/message flow
   - AI request/stream/cancel/review flow
+- Resolve the evaluator-noted mismatch between documented cookie/offline behavior and actual code behavior.
+- Remove or reword any claim that is not implemented yet, especially:
+  - offline buffering
+  - full version restore semantics
+  - full AI-proposal handling semantics
+- For each removed/reworded claim, state whether the item is:
+  - no longer in scope
+  - still planned but not delivered
+  - an Assignment 2 baseline gap that remains a grading risk
 - Audit repo structure against docs.
+- Document branch/merge conventions that match actual team practice.
 - Prepare the live demo script in grading order.
 - Review cross-area changes for consistency.
 
 ## Deliverables
 - `DEVIATIONS.md` or equivalent README section
 - updated diagrams/docs
+- documented branch/merge conventions
 - `docs/demo-script.md` or similar short script
 - short Q&A notes for the team
 
@@ -37,6 +48,7 @@ Keep Assignment 2 aligned with Assignment 1 where possible, and make every devia
 ## Verification
 - README setup matches actual commands.
 - Diagrams match actual containers/modules.
+- Auth/communication/offline claims in docs match the real app behavior.
 - Demo script can be followed end-to-end in under 5 minutes.
 
 ## Done when
