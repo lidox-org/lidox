@@ -16,10 +16,16 @@ test('AiController.invoke rejects an invalid document id', async () => {
   }));
   const controller = new AiController({
     invoke: invokeSpy.fn,
+    listHistory: async () => {
+      throw new Error('not used');
+    },
     streamTask: async () => {
       throw new Error('not used');
     },
     cancelTask: async () => {
+      throw new Error('not used');
+    },
+    reviewTask: async () => {
       throw new Error('not used');
     },
     getTaskStatus: async () => {
@@ -46,10 +52,16 @@ test('AiController.invoke rejects an invalid AI payload', async () => {
   }));
   const controller = new AiController({
     invoke: invokeSpy.fn,
+    listHistory: async () => {
+      throw new Error('not used');
+    },
     streamTask: async () => {
       throw new Error('not used');
     },
     cancelTask: async () => {
+      throw new Error('not used');
+    },
+    reviewTask: async () => {
       throw new Error('not used');
     },
     getTaskStatus: async () => {
@@ -77,10 +89,16 @@ test('AiController.invoke parses the body and delegates to the service', async (
   const invokeSpy = createAsyncSpy(async () => expectedResponse);
   const controller = new AiController({
     invoke: invokeSpy.fn,
+    listHistory: async () => {
+      throw new Error('not used');
+    },
     streamTask: async () => {
       throw new Error('not used');
     },
     cancelTask: async () => {
+      throw new Error('not used');
+    },
+    reviewTask: async () => {
       throw new Error('not used');
     },
     getTaskStatus: async () => {
@@ -130,10 +148,16 @@ test('AiController.getTask rejects an invalid task id', async () => {
     invoke: async () => {
       throw new Error('not used');
     },
+    listHistory: async () => {
+      throw new Error('not used');
+    },
     streamTask: async () => {
       throw new Error('not used');
     },
     cancelTask: async () => {
+      throw new Error('not used');
+    },
+    reviewTask: async () => {
       throw new Error('not used');
     },
     getTaskStatus: getTaskSpy.fn,
@@ -162,10 +186,16 @@ test('AiController.getTask delegates validated ids and user id to the service', 
     invoke: async () => {
       throw new Error('not used');
     },
+    listHistory: async () => {
+      throw new Error('not used');
+    },
     streamTask: async () => {
       throw new Error('not used');
     },
     cancelTask: async () => {
+      throw new Error('not used');
+    },
+    reviewTask: async () => {
       throw new Error('not used');
     },
     getTaskStatus: getTaskSpy.fn,
@@ -197,8 +227,14 @@ test('AiController.streamTask rejects an invalid task id', async () => {
     invoke: async () => {
       throw new Error('not used');
     },
+    listHistory: async () => {
+      throw new Error('not used');
+    },
     streamTask: streamSpy.fn,
     cancelTask: async () => {
+      throw new Error('not used');
+    },
+    reviewTask: async () => {
       throw new Error('not used');
     },
     getTaskStatus: async () => {
@@ -225,8 +261,14 @@ test('AiController.streamTask delegates validated ids and user id to the service
     invoke: async () => {
       throw new Error('not used');
     },
+    listHistory: async () => {
+      throw new Error('not used');
+    },
     streamTask: streamSpy.fn,
     cancelTask: async () => {
+      throw new Error('not used');
+    },
+    reviewTask: async () => {
       throw new Error('not used');
     },
     getTaskStatus: async () => {
@@ -264,10 +306,16 @@ test('AiController.cancelTask delegates validated ids and user id to the service
     invoke: async () => {
       throw new Error('not used');
     },
+    listHistory: async () => {
+      throw new Error('not used');
+    },
     streamTask: async () => {
       throw new Error('not used');
     },
     cancelTask: cancelSpy.fn,
+    reviewTask: async () => {
+      throw new Error('not used');
+    },
     getTaskStatus: async () => {
       throw new Error('not used');
     },
@@ -289,6 +337,96 @@ test('AiController.cancelTask delegates validated ids and user id to the service
       VALID_DOC_ID,
       VALID_TASK_ID,
       '77777777-7777-4777-8777-777777777777',
+    ],
+  ]);
+});
+
+test('AiController.getHistory delegates validated doc id and user id to the service', async () => {
+  const historySpy = createAsyncSpy(async () => []);
+  const controller = new AiController({
+    invoke: async () => {
+      throw new Error('not used');
+    },
+    listHistory: historySpy.fn,
+    streamTask: async () => {
+      throw new Error('not used');
+    },
+    cancelTask: async () => {
+      throw new Error('not used');
+    },
+    reviewTask: async () => {
+      throw new Error('not used');
+    },
+    getTaskStatus: async () => {
+      throw new Error('not used');
+    },
+  } as never);
+
+  await controller.getHistory(
+    VALID_DOC_ID,
+    createAuthenticatedRequest({
+      user: {
+        userId: '88888888-8888-4888-8888-888888888888',
+      },
+    }),
+  );
+
+  assert.deepEqual(historySpy.calls, [
+    [VALID_DOC_ID, '88888888-8888-4888-8888-888888888888'],
+  ]);
+});
+
+test('AiController.reviewTask delegates validated ids, body, and user id to the service', async () => {
+  const reviewSpy = createAsyncSpy(async () => ({
+    taskId: VALID_TASK_ID,
+    status: 'partial' as const,
+    stale: false,
+    appliedText: 'Edited proposal',
+  }));
+  const controller = new AiController({
+    invoke: async () => {
+      throw new Error('not used');
+    },
+    listHistory: async () => {
+      throw new Error('not used');
+    },
+    streamTask: async () => {
+      throw new Error('not used');
+    },
+    cancelTask: async () => {
+      throw new Error('not used');
+    },
+    reviewTask: reviewSpy.fn,
+    getTaskStatus: async () => {
+      throw new Error('not used');
+    },
+  } as never);
+
+  await controller.reviewTask(
+    VALID_DOC_ID,
+    VALID_TASK_ID,
+    {
+      action: 'partial',
+      appliedText: 'Edited proposal',
+      currentSelection: 'Current selection',
+    },
+    createAuthenticatedRequest({
+      user: {
+        userId: '99999999-9999-4999-8999-999999999999',
+      },
+    }),
+  );
+
+  assert.deepEqual(reviewSpy.calls, [
+    [
+      VALID_DOC_ID,
+      VALID_TASK_ID,
+      {
+        action: 'partial',
+        appliedText: 'Edited proposal',
+        currentSelection: 'Current selection',
+      },
+      '99999999-9999-4999-8999-999999999999',
     ],
   ]);
 });

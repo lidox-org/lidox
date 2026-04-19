@@ -91,6 +91,7 @@ export type AiTaskEvent = z.infer<typeof AiTaskEventSchema>;
 export const AiInvokeSchema = z.object({
   task: AiTaskType,
   selection: z.string().min(1).max(50000),
+  selectionHtml: z.string().min(1).max(100000).optional(),
   nodeId: z.string().optional(),
   stateVector: z.string().optional(),
   language: z.string().optional(),
@@ -130,6 +131,54 @@ export const AiTaskMetadataSchema = z.object({
   taskType: AiTaskType,
 });
 export type AiTaskMetadata = z.infer<typeof AiTaskMetadataSchema>;
+
+export const AiProposalReviewAction = z.enum([
+  'accept',
+  'reject',
+  'partial',
+]);
+export type AiProposalReviewAction = z.infer<typeof AiProposalReviewAction>;
+
+export const AiProposalReviewSchema = z.object({
+  action: AiProposalReviewAction,
+  appliedText: z.string().min(1).optional(),
+  currentSelection: z.string().optional(),
+  currentStateVector: z.string().optional(),
+});
+export type AiProposalReviewInput = z.infer<typeof AiProposalReviewSchema>;
+
+export const AiProposalReviewResponseSchema = z.object({
+  taskId: z.string().uuid(),
+  status: AiInteractionStatus,
+  stale: z.boolean(),
+  appliedText: z.string().nullable().optional(),
+});
+export type AiProposalReviewResponse = z.infer<
+  typeof AiProposalReviewResponseSchema
+>;
+
+export const AiInteractionHistoryItemSchema = z.object({
+  id: z.string().uuid(),
+  documentId: z.string().uuid(),
+  userId: z.string().uuid(),
+  taskType: AiTaskType,
+  inputTokens: z.number().int().nonnegative(),
+  outputTokens: z.number().int().nonnegative(),
+  modelUsed: z.string(),
+  costCents: z.number().int().nonnegative(),
+  status: AiInteractionStatus,
+  sourceTextHash: z.string().nullable(),
+  sourceText: z.string().nullable(),
+  proposalText: z.string().nullable(),
+  sourceStateVector: z.string().nullable(),
+  appliedText: z.string().nullable(),
+  staleAtReview: z.boolean(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+export type AiInteractionHistoryItem = z.infer<
+  typeof AiInteractionHistoryItemSchema
+>;
 
 export const AI_WRITE_TASKS: AiTaskType[] = ['rewrite', 'summarize', 'translate', 'grammar', 'restructure'];
 export const AI_READ_TASKS: AiTaskType[] = ['analyze', 'explain'];

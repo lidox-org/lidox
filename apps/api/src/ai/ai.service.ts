@@ -8,6 +8,9 @@ import {
 import { Queue } from 'bullmq';
 import { v4 as uuidv4 } from 'uuid';
 import { redis } from '../config/redis';
+import { and, desc, eq } from 'drizzle-orm';
+import { db } from '../config/database';
+import { aiInteractions } from '../db/schema';
 import { DocumentsService } from '../documents/documents.service';
 import {
   ROLE_HIERARCHY,
@@ -16,7 +19,10 @@ import {
 } from '@lidox/types';
 import type {
   AiCancelResponse,
+  AiInteractionHistoryItem,
   AiInvokeInput,
+  AiProposalReviewInput,
+  AiProposalReviewResponse,
   AiTaskResult,
 } from '@lidox/types';
 import type { AiJobData } from './ai.processor';
@@ -33,6 +39,10 @@ import {
   createCancelledTaskResult,
   createQueuedTaskResult,
 } from './task-status';
+import {
+  detectProposalStaleness,
+  resolveProposalReview,
+} from './proposal-review';
 
 @Injectable()
 export class AiService {
@@ -101,7 +111,9 @@ export class AiService {
         userId,
         taskType: input.task,
         selection: input.selection,
+        selectionHtml: input.selectionHtml,
         language: input.language,
+        stateVector: input.stateVector,
       },
       {
         jobId: taskId,
@@ -178,6 +190,147 @@ export class AiService {
         status: 'cancelling',
       };
     });
+  }
+
+  async reviewTask(
+    docId: string,
+    taskId: string,
+    review: AiProposalReviewInput,
+    userId: string,
+  ): Promise<AiProposalReviewResponse> {
+    const [interaction] = await db
+      .select()
+      .from(aiInteractions)
+      .where(
+        and(
+          eq(aiInteractions.id, taskId),
+          eq(aiInteractions.documentId, docId),
+        ),
+      )
+      .limit(1);
+
+    if (!interaction) {
+      throw new NotFoundException('Proposal not found');
+    }
+
+    const role = await this.documentsService.getUserRole(docId, userId);
+    if (!role) {
+      throw new ForbiddenException('No access to this document');
+    }
+
+    const isWriteTask = (AI_WRITE_TASKS as readonly string[]).includes(
+      interaction.taskType,
+    );
+    const isReadTask = (AI_READ_TASKS as readonly string[]).includes(
+      interaction.taskType,
+    );
+
+    if (isWriteTask && ROLE_HIERARCHY[role] < ROLE_HIERARCHY.editor) {
+      throw new ForbiddenException(
+        'Editor access required to review write AI tasks',
+      );
+    }
+
+    if (isReadTask && ROLE_HIERARCHY[role] < ROLE_HIERARCHY.commenter) {
+      throw new ForbiddenException(
+        'Commenter access required to review read AI tasks',
+      );
+    }
+
+    if (
+      interaction.status === 'accepted' ||
+      interaction.status === 'rejected' ||
+      interaction.status === 'partial'
+    ) {
+      throw new ConflictException('Proposal has already been reviewed');
+    }
+
+    if (review.action === 'partial' && !review.appliedText?.trim()) {
+      throw new ConflictException(
+        'Partial review requires the applied text payload',
+      );
+    }
+
+    const stale = detectProposalStaleness({
+      sourceTextHash: interaction.sourceTextHash,
+      sourceStateVector: interaction.sourceStateVector,
+      currentSelection: review.currentSelection,
+      currentStateVector: review.currentStateVector,
+    });
+
+    if (stale && review.action !== 'reject') {
+      await db
+        .update(aiInteractions)
+        .set({
+          status: 'expired',
+          staleAtReview: true,
+          updatedAt: new Date(),
+        })
+        .where(eq(aiInteractions.id, interaction.id));
+
+      throw new ConflictException(
+        'Proposal is stale because the source text changed. Regenerate it.',
+      );
+    }
+
+    const { nextStatus, appliedText } = resolveProposalReview({
+      review,
+      proposalText: interaction.proposalText,
+    });
+
+    await db
+      .update(aiInteractions)
+      .set({
+        status: nextStatus,
+        appliedText,
+        staleAtReview: stale,
+        updatedAt: new Date(),
+      })
+      .where(eq(aiInteractions.id, interaction.id));
+
+    return {
+      taskId,
+      status: nextStatus,
+      stale,
+      appliedText,
+    };
+  }
+
+  async listHistory(
+    docId: string,
+    userId: string,
+  ): Promise<AiInteractionHistoryItem[]> {
+    const role = await this.documentsService.getUserRole(docId, userId);
+    if (!role) {
+      throw new ForbiddenException('No access to this document');
+    }
+
+    const interactions = await db
+      .select()
+      .from(aiInteractions)
+      .where(eq(aiInteractions.documentId, docId))
+      .orderBy(desc(aiInteractions.createdAt))
+      .limit(50);
+
+    return interactions.map((interaction) => ({
+      id: interaction.id,
+      documentId: interaction.documentId,
+      userId: interaction.userId,
+      taskType: interaction.taskType as AiInteractionHistoryItem['taskType'],
+      inputTokens: interaction.inputTokens,
+      outputTokens: interaction.outputTokens,
+      modelUsed: interaction.modelUsed,
+      costCents: interaction.costCents,
+      status: interaction.status as AiInteractionHistoryItem['status'],
+      sourceTextHash: interaction.sourceTextHash ?? null,
+      sourceText: interaction.sourceText ?? null,
+      proposalText: interaction.proposalText ?? null,
+      sourceStateVector: interaction.sourceStateVector ?? null,
+      appliedText: interaction.appliedText ?? null,
+      staleAtReview: interaction.staleAtReview,
+      createdAt: interaction.createdAt.toISOString(),
+      updatedAt: interaction.updatedAt.toISOString(),
+    }));
   }
 
   /* ---------------------------------------------------------------- */

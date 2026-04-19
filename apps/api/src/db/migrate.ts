@@ -81,8 +81,25 @@ export async function runMigrations(): Promise<void> {
         cost_cents       INT NOT NULL,
         status           VARCHAR(20)  NOT NULL,
         source_text_hash VARCHAR(128),
+        source_text      TEXT,
+        proposal_text    TEXT,
+        source_state_vector TEXT,
+        applied_text     TEXT,
+        stale_at_review  BOOLEAN NOT NULL DEFAULT FALSE,
         created_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+        ,
+        updated_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW()
       );
+    `);
+
+    await client.query(`
+      ALTER TABLE ai_interactions
+      ADD COLUMN IF NOT EXISTS source_text TEXT,
+      ADD COLUMN IF NOT EXISTS proposal_text TEXT,
+      ADD COLUMN IF NOT EXISTS source_state_vector TEXT,
+      ADD COLUMN IF NOT EXISTS applied_text TEXT,
+      ADD COLUMN IF NOT EXISTS stale_at_review BOOLEAN NOT NULL DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
     `);
 
     await client.query(`

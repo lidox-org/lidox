@@ -2,7 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   AiCancelResponseSchema,
+  AiInteractionHistoryItemSchema,
   AiInvokeSchema,
+  AiProposalReviewSchema,
   AiTaskMetadataSchema,
   AiTaskEventSchema,
   AiInteractionStatus,
@@ -16,6 +18,7 @@ test('AI invoke schema accepts orchestration metadata needed by the spec', () =>
   const parsed = AiInvokeSchema.parse({
     task: 'rewrite',
     selection: 'Selected text',
+    selectionHtml: '<p><strong>Selected</strong> text</p>',
     nodeId: 'paragraph-12',
     stateVector: 'encoded-state-vector',
     language: 'French',
@@ -24,6 +27,7 @@ test('AI invoke schema accepts orchestration metadata needed by the spec', () =>
   assert.deepEqual(parsed, {
     task: 'rewrite',
     selection: 'Selected text',
+    selectionHtml: '<p><strong>Selected</strong> text</p>',
     nodeId: 'paragraph-12',
     stateVector: 'encoded-state-vector',
     language: 'French',
@@ -114,4 +118,41 @@ test('AI task metadata schema binds a task to its document and owner', () => {
 
   assert.equal(parsed.taskType, 'rewrite');
   assert.equal(parsed.documentId, '22222222-2222-4222-8222-222222222222');
+});
+
+test('AI proposal review schema accepts review payloads', () => {
+  const parsed = AiProposalReviewSchema.parse({
+    action: 'partial',
+    appliedText: 'Accepted part only',
+    currentSelection: 'Current selected text',
+    currentStateVector: 'state-vector',
+  });
+
+  assert.equal(parsed.action, 'partial');
+  assert.equal(parsed.appliedText, 'Accepted part only');
+});
+
+test('AI interaction history item schema captures persisted proposal details', () => {
+  const parsed = AiInteractionHistoryItemSchema.parse({
+    id: '33333333-3333-4333-8333-333333333333',
+    documentId: '22222222-2222-4222-8222-222222222222',
+    userId: '11111111-1111-1111-1111-111111111111',
+    taskType: 'rewrite',
+    inputTokens: 10,
+    outputTokens: 20,
+    modelUsed: 'mock',
+    costCents: 1,
+    status: 'pending',
+    sourceTextHash: 'hash',
+    sourceText: 'Original',
+    proposalText: 'Proposal',
+    sourceStateVector: 'state-vector',
+    appliedText: null,
+    staleAtReview: false,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+  });
+
+  assert.equal(parsed.proposalText, 'Proposal');
+  assert.equal(parsed.staleAtReview, false);
 });

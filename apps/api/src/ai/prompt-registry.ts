@@ -2,43 +2,82 @@ import type { AiTaskType } from '@lidox/types';
 
 export interface PromptTemplate {
   system: string;
-  user: (selection: string, language?: string) => string;
+  user: (selection: string, selectionHtml?: string, language?: string) => string;
+}
+
+const HTML_FRAGMENT_RULES = [
+  'Return only a valid HTML fragment with no markdown fences or commentary.',
+  'Preserve the existing structure and formatting tags whenever possible.',
+  'Do not invent wrapper elements unless they are required to keep the fragment valid.',
+  'Keep links, emphasis, headings, lists, and inline code as HTML.',
+].join(' ');
+
+function buildWriteTaskPrompt(
+  instruction: string,
+  selection: string,
+  selectionHtml?: string,
+): string {
+  if (!selectionHtml) {
+    return `${instruction}\n\n---\n${selection}\n---`;
+  }
+
+  return `${instruction}\n\nPlain text:\n---\n${selection}\n---\n\nHTML fragment:\n---\n${selectionHtml}\n---`;
 }
 
 const PROMPT_REGISTRY: Record<AiTaskType, PromptTemplate> = {
   rewrite: {
     system:
-      'You are a professional writing assistant. Rewrite the given text to improve clarity, flow, and readability while preserving the original meaning and tone.',
-    user: (selection) =>
-      `Please rewrite the following text:\n\n---\n${selection}\n---`,
+      `You are a professional writing assistant. Rewrite the given text to improve clarity, flow, and readability while preserving the original meaning and tone. ${HTML_FRAGMENT_RULES}`,
+    user: (selection, selectionHtml) =>
+      buildWriteTaskPrompt(
+        'Please rewrite the following text.',
+        selection,
+        selectionHtml,
+      ),
   },
 
   summarize: {
     system:
-      'You are a concise summarisation assistant. Produce a clear, structured summary of the provided text. Use bullet points for key takeaways when appropriate.',
-    user: (selection) =>
-      `Please summarize the following text:\n\n---\n${selection}\n---`,
+      `You are a concise summarisation assistant. Produce a clear, structured summary of the provided text. Use bullet points for key takeaways when appropriate. ${HTML_FRAGMENT_RULES}`,
+    user: (selection, selectionHtml) =>
+      buildWriteTaskPrompt(
+        'Please summarize the following text.',
+        selection,
+        selectionHtml,
+      ),
   },
 
   translate: {
     system:
-      'You are a professional translator. Translate the given text accurately, preserving formatting and nuance.',
-    user: (selection, language) =>
-      `Translate the following text to ${language || 'English'}:\n\n---\n${selection}\n---`,
+      `You are a professional translator. Translate the given text accurately, preserving formatting and nuance. Translate the text content while keeping the HTML tags intact. ${HTML_FRAGMENT_RULES}`,
+    user: (selection, selectionHtml, language) =>
+      buildWriteTaskPrompt(
+        `Translate the following text to ${language || 'English'}.`,
+        selection,
+        selectionHtml,
+      ),
   },
 
   grammar: {
     system:
-      'You are a grammar and spelling assistant. Fix all grammatical errors, typos, and punctuation issues in the text. Return only the corrected text.',
-    user: (selection) =>
-      `Fix the grammar and spelling in the following text:\n\n---\n${selection}\n---`,
+      `You are a grammar and spelling assistant. Fix all grammatical errors, typos, and punctuation issues in the text. ${HTML_FRAGMENT_RULES}`,
+    user: (selection, selectionHtml) =>
+      buildWriteTaskPrompt(
+        'Fix the grammar and spelling in the following text.',
+        selection,
+        selectionHtml,
+      ),
   },
 
   restructure: {
     system:
-      'You are a document structure assistant. Reorganise the given text into a clearer, more logical structure. Add headings, break up long paragraphs, and improve overall flow.',
-    user: (selection) =>
-      `Please restructure the following text for better organisation:\n\n---\n${selection}\n---`,
+      `You are a document structure assistant. Reorganise the given text into a clearer, more logical structure. Add headings, break up long paragraphs, and improve overall flow. ${HTML_FRAGMENT_RULES}`,
+    user: (selection, selectionHtml) =>
+      buildWriteTaskPrompt(
+        'Please restructure the following text for better organisation.',
+        selection,
+        selectionHtml,
+      ),
   },
 
   analyze: {
@@ -65,12 +104,13 @@ export function getPromptTemplate(taskType: AiTaskType): PromptTemplate {
 export function buildPromptMessages(
   taskType: AiTaskType,
   selection: string,
+  selectionHtml?: string,
   language?: string,
 ): { system: string; user: string } {
   const template = getPromptTemplate(taskType);
 
   return {
     system: template.system,
-    user: template.user(selection, language),
+    user: template.user(selection, selectionHtml, language),
   };
 }

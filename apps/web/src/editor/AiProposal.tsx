@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react';
+import type { AiTaskType } from '@lidox/types';
+import { useState, useMemo, useEffect } from 'react';
 import {
   Check,
   X,
@@ -6,14 +7,26 @@ import {
   ChevronUp,
   Sparkles,
   RotateCcw,
+  Loader2,
+  AlertTriangle,
 } from 'lucide-react';
+import { splitHtmlFragmentIntoSentences } from './aiSelection';
 
 interface Props {
   taskId: string;
-  taskType: string;
+  taskType: AiTaskType;
   original: string;
+  originalHtml?: string;
   proposed: string;
-  onAccept: (text: string) => void;
+  proposedHtml?: string;
+  readOnly?: boolean;
+  streaming?: boolean;
+  stale?: boolean;
+  onAccept: (input: {
+    text: string;
+    html?: string;
+    action: 'accept' | 'partial';
+  }) => void;
   onReject: () => void;
   onDismiss: () => void;
 }
@@ -22,12 +35,24 @@ interface DiffSegment {
   id: number;
   type: 'unchanged' | 'removed' | 'added';
   text: string;
+  html?: string;
   accepted: boolean;
 }
 
-function computeDiffSegments(original: string, proposed: string): DiffSegment[] {
-  const originalSentences = original.match(/[^.!?]+[.!?]?\s*/g) || [original];
-  const proposedSentences = proposed.match(/[^.!?]+[.!?]?\s*/g) || [proposed];
+function computeDiffSegments(input: {
+  originalText: string;
+  originalHtml?: string;
+  proposedText: string;
+  proposedHtml?: string;
+}): DiffSegment[] {
+  const originalSentences = getSentenceSlices(
+    input.originalText,
+    input.originalHtml,
+  );
+  const proposedSentences = getSentenceSlices(
+    input.proposedText,
+    input.proposedHtml,
+  );
 
   const segments: DiffSegment[] = [];
   let id = 0;
@@ -35,17 +60,35 @@ function computeDiffSegments(original: string, proposed: string): DiffSegment[] 
   const maxLen = Math.max(originalSentences.length, proposedSentences.length);
 
   for (let i = 0; i < maxLen; i++) {
-    const orig = originalSentences[i]?.trim() || '';
-    const prop = proposedSentences[i]?.trim() || '';
+    const orig = originalSentences[i];
+    const prop = proposedSentences[i];
 
-    if (orig === prop && orig) {
-      segments.push({ id: id++, type: 'unchanged', text: orig, accepted: true });
+    if (orig?.text === prop?.text && orig?.text) {
+      segments.push({
+        id: id++,
+        type: 'unchanged',
+        text: prop.text,
+        html: prop.html ?? orig.html,
+        accepted: true,
+      });
     } else {
-      if (orig) {
-        segments.push({ id: id++, type: 'removed', text: orig, accepted: false });
+      if (orig?.text) {
+        segments.push({
+          id: id++,
+          type: 'removed',
+          text: orig.text,
+          html: orig.html,
+          accepted: false,
+        });
       }
-      if (prop) {
-        segments.push({ id: id++, type: 'added', text: prop, accepted: true });
+      if (prop?.text) {
+        segments.push({
+          id: id++,
+          type: 'added',
+          text: prop.text,
+          html: prop.html,
+          accepted: true,
+        });
       }
     }
   }
@@ -58,6 +101,7 @@ const TASK_LABELS: Record<string, string> = {
   summarize: 'Summary',
   translate: 'Translation',
   grammar: 'Grammar Fix',
+  restructure: 'Restructure',
   analyze: 'Analysis',
   explain: 'Explanation',
 };
@@ -65,20 +109,35 @@ const TASK_LABELS: Record<string, string> = {
 export function AiProposal({
   taskType,
   original,
+  originalHtml,
   proposed,
+  proposedHtml,
+  readOnly = false,
+  streaming = false,
+  stale = false,
   onAccept,
   onReject,
   onDismiss,
 }: Props) {
   const initialSegments = useMemo(
-    () => computeDiffSegments(original, proposed),
-    [original, proposed],
+    () =>
+      computeDiffSegments({
+        originalText: original,
+        originalHtml,
+        proposedText: proposed,
+        proposedHtml,
+      }),
+    [original, originalHtml, proposed, proposedHtml],
   );
 
   const [segments, setSegments] = useState(initialSegments);
   const [expanded, setExpanded] = useState(true);
 
-  const isReadTask = taskType === 'analyze' || taskType === 'explain';
+  useEffect(() => {
+    setSegments(initialSegments);
+  }, [initialSegments]);
+
+  const isReadTask = readOnly || taskType === 'analyze' || taskType === 'explain';
 
   const toggleSegment = (segId: number) => {
     setSegments((prev) =>
@@ -92,7 +151,7 @@ export function AiProposal({
 
   const handleAcceptAll = () => {
     if (isReadTask) {
-      onDismiss();
+      onAccept({ text: proposed, action: 'accept' });
       return;
     }
 
@@ -101,7 +160,20 @@ export function AiProposal({
       .map((seg) => seg.text)
       .join(' ');
 
-    onAccept(result);
+    const action = segments.some(
+      (seg, index) => seg.accepted !== initialSegments[index]?.accepted,
+    )
+      ? 'partial'
+      : 'accept';
+
+    onAccept({
+      text: result,
+      html:
+        action === 'accept'
+          ? proposedHtml
+          : buildAcceptedHtmlFragment(segments.filter((seg) => seg.accepted)),
+      action,
+    });
   };
 
   const handleRejectAll = () => {
@@ -122,7 +194,7 @@ export function AiProposal({
             AI {TASK_LABELS[taskType] || 'Suggestion'}
           </span>
           <span className="rounded-full bg-accentLight px-2 py-0.5 text-[10px] font-medium text-accent">
-            Review
+            {streaming ? 'Streaming' : stale ? 'Stale' : 'Review'}
           </span>
         </div>
         <div className="flex items-center gap-1">
@@ -149,9 +221,26 @@ export function AiProposal({
 
       {expanded && (
         <>
+          {stale && (
+            <div className="flex items-center gap-2 border-b border-yellow-200 bg-yellow-50 px-4 py-2 text-sm text-yellow-800">
+              <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+              The source text changed while this proposal was in flight. Regenerate it instead of applying it.
+            </div>
+          )}
+
           {/* Diff content */}
           <div className="max-h-64 overflow-y-auto p-4">
-            {isReadTask ? (
+            {streaming ? (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-sm font-medium text-accent">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  AI is generating a suggestion...
+                </div>
+                <div className="text-sm leading-relaxed text-ink">
+                  {proposed || 'Waiting for the first chunk...'}
+                </div>
+              </div>
+            ) : isReadTask ? (
               <div className="text-sm leading-relaxed text-ink">
                 {proposed}
               </div>
@@ -205,6 +294,7 @@ export function AiProposal({
             {!isReadTask && (
               <button
                 onClick={resetToggles}
+                disabled={streaming}
                 className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-muted hover:bg-surface hover:text-ink transition-default"
               >
                 <RotateCcw className="h-3 w-3" />
@@ -216,17 +306,19 @@ export function AiProposal({
             <div className="flex items-center gap-2">
               <button
                 onClick={handleRejectAll}
+                disabled={streaming}
                 className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted hover:bg-surface hover:text-ink transition-default"
               >
                 <X className="h-3 w-3" />
-                {isReadTask ? 'Close' : 'Reject All'}
+                {streaming ? 'Waiting...' : isReadTask ? 'Close' : 'Reject All'}
               </button>
               <button
                 onClick={handleAcceptAll}
+                disabled={streaming || stale}
                 className="flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700 transition-default"
               >
                 <Check className="h-3 w-3" />
-                {isReadTask ? 'Done' : 'Accept'}
+                {streaming ? 'Generating...' : stale ? 'Regenerate Needed' : isReadTask ? 'Done' : 'Accept'}
               </button>
             </div>
           </div>
@@ -234,4 +326,42 @@ export function AiProposal({
       )}
     </div>
   );
+}
+
+function getSentenceSlices(
+  text: string,
+  html?: string,
+): Array<{ text: string; html?: string }> {
+  const htmlSlices = html ? splitHtmlFragmentIntoSentences(html) : [];
+
+  if (htmlSlices.length > 0) {
+    return htmlSlices;
+  }
+
+  const sentences = text.match(/[^.!?]+[.!?]?\s*/g) || [text];
+
+  return sentences
+    .map((sentence) => sentence.trim())
+    .filter(Boolean)
+    .map((sentence) => ({ text: sentence }));
+}
+
+function buildAcceptedHtmlFragment(segments: DiffSegment[]): string | undefined {
+  const fragments = segments
+    .map((segment) =>
+      segment.html !== undefined ? segment.html : escapeHtml(segment.text),
+    )
+    .filter((fragment) => fragment.length > 0);
+
+  if (fragments.length === 0) {
+    return undefined;
+  }
+
+  return fragments.join('');
+}
+
+function escapeHtml(text: string): string {
+  const container = document.createElement('div');
+  container.textContent = text;
+  return container.innerHTML;
 }
