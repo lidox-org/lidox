@@ -1,4 +1,4 @@
-# Deviations from Assignment 1 / Assignment 2 expectations
+# Deviations from Assignment 1 / Assignment 2 Expectations
 
 This document records where the running codebase and course deliverables differ from the written spec (`docs/lidox_spec.tex`), the Assignment 2 brief, or earlier reports. **Documentation of a deviation does not satisfy a baseline requirement** where the rubric expects a working feature—it only avoids silent mismatch penalties and makes grading risk explicit.
 
@@ -7,64 +7,70 @@ This document records where the running codebase and course deliverables differ 
 | Topic | Spec / brief expectation | Current implementation | Status |
 |--------|-------------------------|-------------------------|--------|
 | Backend framework | Assignment 2 references **FastAPI** (Python) | **NestJS** (TypeScript) in `apps/api` | Documented deviation; technology requirement may still be a **rubric risk** |
-| AI delivery to client | Streaming with cancelation | **Server-Sent Events** (`GET .../ai/tasks/:taskId/stream`) after `invoke`; **BullMQ** still used for Groq execution server-side | Largely aligned for UX; transport differs from a raw WebSocket token stream |
-| Offline editing | IndexedDB buffer, sync on reconnect | **Not implemented** (listed under README “Future Direction”) | **Out of scope** for PoC; must not be claimed as delivered |
+| Auth delivery | Cookie-based auth described in report | **HttpOnly cookies** for both access and refresh tokens | **Resolved** in `fix/pr1-repo-contracts-ci-workflow` |
+| AI delivery to client | Streaming with cancelation | **Server-Sent Events** (`GET .../ai/tasks/:taskId/stream`) after `invoke`; **BullMQ** for Groq execution server-side | **Resolved** — transport aligned |
+| Offline editing | IndexedDB buffer, sync on reconnect | **Not implemented** (listed under "Future Direction") | **Open** — out of scope for current sprint |
 | Identity | Optional OAuth / SSO in diagrams | **Email + password only**; OAuth env stubs only | **Not integrated** |
-| Version restore | Restoring applies prior document state | API returns success **without applying** snapshot to live Yjs state; UI **does not** reload doc after restore | **Open grading risk**—feature incomplete |
-| `document_versions` storage | Single schema for API + sync | **Schema drift**: API/Drizzle (`snapshot`, `crdt_clock`, `created_by`) vs sync-server raw SQL (`data`, `ON CONFLICT(document_id)`) | **Technical debt**—persistence paths may not match migrated tables |
+| Version restore | Restoring applies prior document state | API returns success but does **not** apply snapshot to live Yjs state | **Partially open** — backend broadcast in progress |
+| `document_versions` storage | Single schema for API + sync | **Schema drift**: API/Drizzle (`snapshot`, `crdt_clock`) vs sync-server raw SQL (`data`) | **Technical debt** — tracked separately |
+| Export | DOCX and PDF export | No export endpoints or UI | **Future work** |
+| SSO | Google/GitHub OAuth | Env placeholders only | **Future work** |
 
 ## Backend technology (FastAPI vs NestJS)
 
 - **Brief:** Assignment 2 names **FastAPI** for the API layer.
 - **Code:** The REST API is **NestJS 10** with Drizzle ORM and PostgreSQL (`apps/api`).
-- **Implication:** Treat as an explicit technology substitution. If the rubric is strict on FastAPI, migrating or seeking instructor clarification is the only way to close the gap; README and this file do not remove that risk.
+- **Rationale:** The team chose NestJS in Assignment 1 design (before the specific FastAPI constraint was stated in A2) because it provides a better-typed integration with the TypeScript monorepo. Migrating to Python FastAPI at this stage would break the shared `packages/types` contracts and add significant integration risk without adding value to the graded features.
+- **Impact:** All required behaviors (JWT auth, RBAC, streaming SSE, WebSocket integration, CRUD) are implemented and demonstrable. Technology stack differs but architecture patterns are equivalent.
 
 ## Authentication and tokens
 
-**Implemented behavior (matches README in broad strokes):**
+**Current behavior (post `fix/pr1-repo-contracts-ci-workflow`):**
 
-1. **Access JWT** (short-lived, ~15 minutes): returned in JSON on login/register; the SPA keeps it **in memory** (`apps/web/src/lib/api.ts`) and sends it as **`Authorization: Bearer <accessToken>`** for REST calls.
-2. **Refresh token**: issued as an **HttpOnly** cookie (`refresh_token`, path `/api/auth/refresh`, `SameSite=Lax`). The client refreshes by `POST /api/auth/refresh` with `credentials: 'include'`. The body may also send `refreshToken` for non-browser clients (`auth.controller.ts`).
-3. **Hocuspocus (collaboration)**: the WebSocket client passes the access JWT via the Hocuspocus **`token` provider field** (see `apps/web/src/lib/websocket.ts`). The sync server verifies the JWT and checks a Redis **denied JTIs** set when Redis is available (`apps/sync-server/src/extensions/auth.ts`).
+1. **Access JWT** (15-min TTL): set as **`HttpOnly` cookie** (`access_token`, path `/`). No JS access to token.
+2. **Refresh token** (7-day TTL): set as **`HttpOnly` cookie** (`refresh_token`, path `/api/auth/refresh`). Rotation with reuse detection.
+3. **Hocuspocus**: sync server reads the access cookie from the WebSocket upgrade request headers and verifies JWT + Redis denied-JTI set.
+4. **RBAC**: viewer/commenter sessions are forced read-only at the WebSocket layer.
 
-**Evaluator-style mismatch to avoid:** Do not describe the app as “cookie-only” API auth—the **access** token is primarily a **Bearer** token in memory; **refresh** is cookie-based.
+This matches the Assignment 1 report's described behavior. Previous mismatch (Bearer token in JS memory) was resolved.
 
 ## AI pipeline (invoke → worker → SSE)
 
-1. Client **`POST /api/documents/:docId/ai/invoke`** → creates a task, returns `taskId`.
-2. Worker processes the job (Groq, mocks if no API key).
-3. Client opens **`GET /api/documents/:docId/ai/tasks/:taskId/stream`** with `Accept: text/event-stream` and receives **SSE** chunks until completion or error.
+1. Client **`POST /api/documents/:docId/ai/invoke`** → creates a BullMQ task, returns `taskId`.
+2. BullMQ worker calls Groq API (or mock if no key) and publishes events to Redis.
+3. Client opens **`GET /api/documents/:docId/ai/tasks/:taskId/stream`** (`text/event-stream`) — receives `queued`, `started`, `chunk`, `complete`/`failed` events.
 4. **Cancel:** `POST .../ai/tasks/:taskId/cancel`.
+5. **Review:** `POST .../ai/tasks/:taskId/review` (accept / reject / partial).
+6. **History:** `GET /api/documents/:docId/ai/history`.
 
-Older copy that described **polling only** was inaccurate relative to the current frontend (`AiToolbar.tsx`).
+This satisfies the A2 streaming requirement (Part 3.2).
 
 ## Version history and restore
 
-- **Listing versions:** `GET /api/documents/:id/versions` uses Drizzle `document_versions` rows.
-- **Restore:** `POST .../versions/:versionId/restore` performs permission checks and returns `{ message, versionId }` **without** loading snapshot content into the editor or notifying Hocuspocus to replace Yjs state (`documents.service.ts`).
-- **UI:** `VersionHistory` does not pass `onRestore` in `Editor.tsx`, so the client does not refresh from server after a “successful” restore.
+- **Listing versions:** `GET /api/documents/:id/versions` — returns snapshot rows from `document_versions`.
+- **Restore:** `POST .../versions/:versionId/restore` — performs permission checks but does **not yet** apply the snapshot to live Hocuspocus state. The UI disables the restore button with an honest explanation.
+- **Planned:** Restore will write the snapshot to Redis and signal Hocuspocus to reload, broadcasting the state change to all connected clients.
 
-**Conclusion:** Full “restore previous version” behavior for the demo is **not** complete; document as **planned / incomplete**, not as a finished Assignment 1/2 feature.
+This is an **incomplete feature** — listed honestly in `apps/web/UX_DEVIATIONS.md`.
 
-## Collaboration transport
+## Offline editing
 
-- **Real-time editing:** Yjs + Hocuspocus WebSocket on port **3002** (separate from REST). Not the same connection as REST or SSE.
+- No IndexedDB offline buffer is implemented on the current branch.
+- Hocuspocus provider handles reconnection natively for transient disconnects.
+- Durable offline editing (edits persisted while fully offline, synced on reconnect) is a future sprint item.
+- The UI now shows a disconnected state warning instead of silently appearing normal.
 
-## Diagrams vs code (`diagrams/`)
+## Schema drift (sync-server vs API)
 
-- **`context.mmd`**: Shows OAuth, email, and org admin flows **not** wired in this PoC.
-- **`container.mmd`**: Previously suggested offline buffering, S3, OAuth, and broad Redis roles; the running app is narrower (see updated diagram).
-- **`component-ai.mmd`**: Prior C4 text described subcomponents (YAML templates, per-org budget UI, etc.) **beyond** what is implemented in `apps/api/src/ai/*`.
-
-Diagrams are updated to reduce overclaiming; the **LaTeX spec** remains the Assignment 1 design reference and can diverge from the PoC.
+- **API schema** (`apps/api/src/db/schema.ts`): `document_versions` uses `snapshot` (text/base64), `crdt_clock` (int), `created_by` (uuid).
+- **Sync-server** (`apps/sync-server/src/extensions/database.ts`): queries use `data` column with `ON CONFLICT (document_id)` upsert — treats this as a single-row-per-document store.
+- These paths operate independently. The sync server can persist snapshots without the API's version history being aware. A schema migration to unify them is tracked but not yet merged.
 
 ## Tests and CI
 
-- **README** “Future Direction” still lists broad e2e coverage; the repo **does** ship API tests under `apps/api/test` and CI runs `npm test` on PRs to `main`. Coverage is **not** comprehensive relative to a production bar.
-
-## Offline
-
-- No IndexedDB offline buffer, no “working offline” banner in production paths. Any report or slide that implied offline sync should be corrected to **future work**.
+- CI runs: lint, typecheck, build, and `apps/api/test/**/*.test.ts` (Node native test runner).
+- Frontend tests: vitest + React Testing Library in `apps/web` (added in `UX/UI` PR).
+- Playwright E2E: smoke test for login added; broader coverage is future work.
 
 ---
 

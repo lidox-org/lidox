@@ -20,7 +20,7 @@ A real-time collaborative document editor with AI writing assistance, built as a
 ## Prerequisites
 
 - **Node.js** 20+
-- **npm** 10+
+- **Corepack** enabled so the repo uses **npm 11.6.2**
 - **Docker** + Docker Compose
 
 ---
@@ -32,7 +32,8 @@ A real-time collaborative document editor with AI writing assistance, built as a
 ```bash
 git clone <repo-url>
 cd lidox
-npm install
+corepack enable
+corepack npm install
 ```
 
 ### 2. Configure environment
@@ -82,6 +83,28 @@ Turborepo starts all three services in parallel:
 ```bash
 npm run db:down   # stop Docker containers
 ```
+
+### Testing
+
+```bash
+npm run lint
+npm run typecheck
+npm run test:unit
+npm run test:integration
+npm run test:e2e
+```
+
+Install the Playwright browser once before the first local e2e run:
+
+```bash
+npm run test:e2e:install
+```
+
+### Workflow
+
+- PRs must start from a GitHub issue and use issue-linked branch names.
+- Each PR must begin with a scope comment explaining what it addresses, what is out of scope, and how it was verified.
+- See `CONTRIBUTING.md` for the workflow contract and `DEVIATIONS.md` for current known Assignment 2 gaps.
 
 ---
 

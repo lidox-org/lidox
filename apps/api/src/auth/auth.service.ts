@@ -13,7 +13,7 @@ import { redis } from '../config/redis';
 import { users, organizations, refreshTokens } from '../db/schema';
 import { env } from '../config/env';
 import type { RegisterInput, LoginInput } from '@lidox/types';
-import * as crypto from 'crypto';
+import * as crypto from 'node:crypto';
 
 @Injectable()
 export class AuthService {
@@ -59,12 +59,7 @@ export class AuthService {
     const { accessToken, refreshToken } = await this.issueTokens(user.id, user.email);
 
     return {
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        avatarUrl: user.avatarUrl ?? null,
-      },
+      user: this.serializeUser(user),
       accessToken,
       refreshToken,
     };
@@ -92,12 +87,7 @@ export class AuthService {
     const { accessToken, refreshToken } = await this.issueTokens(user.id, user.email);
 
     return {
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        avatarUrl: user.avatarUrl ?? null,
-      },
+      user: this.serializeUser(user),
       accessToken,
       refreshToken,
     };
@@ -158,7 +148,11 @@ export class AuthService {
       storedToken.familyId,
     );
 
-    return { accessToken, refreshToken: newRefreshToken };
+    return {
+      user: this.serializeUser(user),
+      accessToken,
+      refreshToken: newRefreshToken,
+    };
   }
 
   /* ---------------------------------------------------------------- */
@@ -226,5 +220,19 @@ export class AuthService {
 
   private hashToken(token: string): string {
     return crypto.createHash('sha256').update(token).digest('hex');
+  }
+
+  private serializeUser(user: {
+    id: string;
+    email: string;
+    name: string;
+    avatarUrl: string | null;
+  }) {
+    return {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      avatarUrl: user.avatarUrl ?? null,
+    };
   }
 }

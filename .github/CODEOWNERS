@@ -1,0 +1,14 @@
+# Default fallback owner until the ownership map is fully aligned in GitHub.
+* @techvio-dev
+
+# Report-aligned ownership areas.
+/apps/web/ @mohamedmaherabdalla
+/apps/api/src/ai/ @murodbecks
+/apps/sync-server/ @murodbecks
+/apps/api/ @techvio-dev
+/packages/types/ @techvio-dev
+/docs/ @techvio-dev
+/diagrams/ @techvio-dev
+/.github/ @techvio-dev
+/DEVIATIONS.md @techvio-dev
+/CONTRIBUTING.md @techvio-dev

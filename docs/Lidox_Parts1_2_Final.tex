@@ -1,0 +1,788 @@
+% =============================================================================
+%  LIDOX PLATFORM — COMPLETE ENGINEERING SPECIFICATION
+%  Assignment 1: Parts 1 & 2 | XeLaTeX
+% =============================================================================
+\documentclass[10pt, a4paper]{article}
+\usepackage{ifxetex}
+\ifxetex
+  \usepackage{fontspec}
+  \setmainfont{TeX Gyre Heros}[BoldFont={TeX Gyre Heros},BoldFeatures={FakeBold=1.5},ItalicFont={TeX Gyre Heros},ItalicFeatures={FakeSlant=0.2}]
+  \setmonofont{DejaVu Sans Mono}[Scale=0.85]
+\else
+  \usepackage[T1]{fontenc}\usepackage{helvet}\renewcommand{\familydefault}{\sfdefault}
+\fi
+\usepackage{geometry}
+\geometry{a4paper,top=0.9in,bottom=0.85in,left=0.85in,right=0.85in,headheight=18pt,headsep=12pt,footskip=26pt}
+\usepackage{xcolor}\usepackage{titlesec}\usepackage{booktabs}\usepackage{tabularx}
+\usepackage{longtable}\usepackage{ltablex}\usepackage{enumitem}\usepackage{hyperref}
+\usepackage{fancyhdr}\usepackage{graphicx}\usepackage{tikz}\usepackage{tcolorbox}
+\usepackage{multicol}\usepackage{float}\usepackage{amssymb}\usepackage{amsmath}
+\usepackage{pifont}\usepackage{microtype}\usepackage{parskip}\usepackage{etoolbox}
+\usepackage{calc}\usepackage{ragged2e}\usepackage{lastpage}\usepackage{pdflscape}
+\usetikzlibrary{positioning,arrows.meta,shapes.geometric,shapes.misc,calc,fit,backgrounds,er}
+\tcbuselibrary{skins,breakable,hooks}
+
+% === COLORS ===
+\definecolor{ink}{RGB}{10,10,20}\definecolor{inkSoft}{RGB}{55,65,81}
+\definecolor{inkMuted}{RGB}{107,114,128}\definecolor{inkFaint}{RGB}{156,163,175}
+\definecolor{surface}{RGB}{249,250,251}\definecolor{surfaceMid}{RGB}{243,244,246}
+\definecolor{border}{RGB}{229,231,235}\definecolor{borderStrong}{RGB}{209,213,219}
+\definecolor{accent}{RGB}{79,70,229}\definecolor{accentLight}{RGB}{238,242,255}
+\definecolor{accentMid}{RGB}{199,210,254}
+\definecolor{success}{RGB}{5,150,105}\definecolor{successBg}{RGB}{236,253,245}
+\definecolor{warn}{RGB}{217,119,6}\definecolor{warnBg}{RGB}{255,251,235}
+\definecolor{danger}{RGB}{220,38,38}\definecolor{dangerBg}{RGB}{254,242,242}
+\definecolor{info}{RGB}{37,99,235}\definecolor{infoBg}{RGB}{239,246,255}
+\definecolor{codeBg}{RGB}{24,24,27}\definecolor{codeFg}{RGB}{228,228,231}
+
+\hypersetup{colorlinks=true,linkcolor=accent,urlcolor=accent,citecolor=accent,
+  pdftitle={Lidox Assignment 1},pdfauthor={Lidox Team}}
+
+% === SECTION STYLES ===
+\titleformat{\section}{\normalfont\fontsize{15}{19}\selectfont\bfseries\color{ink}}{\color{accent}\thesection}{0.6em}{}[{\color{accentMid}\titlerule[1.5pt]}]
+\titlespacing*{\section}{0pt}{22pt}{10pt}
+\titleformat{\subsection}{\normalfont\fontsize{11.5}{14}\selectfont\bfseries\color{ink}}{\color{inkMuted}\thesubsection}{0.5em}{}
+\titlespacing*{\subsection}{0pt}{16pt}{6pt}
+\titleformat{\subsubsection}{\normalfont\fontsize{10}{12.5}\selectfont\bfseries\color{inkSoft}}{\color{inkFaint}\thesubsubsection}{0.5em}{}
+\titlespacing*{\subsubsection}{0pt}{10pt}{3pt}
+
+% === HEADER/FOOTER ===
+\pagestyle{fancy}\fancyhf{}\renewcommand{\headrulewidth}{0pt}
+\fancyhead[L]{\begin{tikzpicture}[remember picture,overlay]\fill[accent](0,0)rectangle(0.2cm,-0.2cm);\end{tikzpicture}\hspace{5pt}{\small\color{inkMuted}\textsf{LIDOX}}\hspace{3pt}{\small\color{border}|}\hspace{3pt}{\small\color{inkFaint}\textsf{Assignment 1}}}
+\fancyhead[R]{\small\color{inkFaint}\textsf{v3.0}}
+\fancyfoot[C]{\small\color{inkFaint}\textsf{\thepage\,/\,\pageref{LastPage}}}
+\fancypagestyle{plain}{\fancyhf{}\renewcommand{\headrulewidth}{0pt}\fancyfoot[C]{\small\color{inkFaint}\textsf{\thepage\,/\,\pageref{LastPage}}}}
+
+% === BOXES ===
+\newtcolorbox{notebox}[1][]{enhanced,breakable,colback=infoBg,colframe=info!40!border,coltitle=info,fonttitle=\bfseries\small,title={\textsf{#1}},boxrule=0pt,leftrule=3pt,arc=0pt,outer arc=0pt,left=7pt,right=7pt,top=5pt,bottom=5pt}
+\newtcolorbox{decisionbox}[1][]{enhanced,breakable,colback=accentLight,colframe=accent!40!border,coltitle=accent,fonttitle=\bfseries\small,title={\textsf{#1}},boxrule=0pt,leftrule=3pt,arc=0pt,outer arc=0pt,left=7pt,right=7pt,top=5pt,bottom=5pt}
+\newtcolorbox{warnbox}[1][]{enhanced,breakable,colback=warnBg,colframe=warn!40!border,coltitle=warn,fonttitle=\bfseries\small,title={\textsf{#1}},boxrule=0pt,leftrule=3pt,arc=0pt,outer arc=0pt,left=7pt,right=7pt,top=5pt,bottom=5pt}
+\newtcolorbox{critbox}[1][]{enhanced,breakable,colback=dangerBg,colframe=danger!40!border,coltitle=danger,fonttitle=\bfseries\small,title={\textsf{#1}},boxrule=0pt,leftrule=3pt,arc=0pt,outer arc=0pt,left=7pt,right=7pt,top=5pt,bottom=5pt}
+\newtcolorbox{adrcard}[1][]{enhanced,breakable,colback=surface,colframe=borderStrong,coltitle=ink,fonttitle=\bfseries\small,title={\textsf{#1}},boxrule=0.5pt,arc=3pt,outer arc=3pt,left=7pt,right=7pt,top=5pt,bottom=5pt,toptitle=3pt,bottomtitle=3pt,colbacktitle=surfaceMid}
+\newtcolorbox{codeblock}{enhanced,colback=codeBg,colframe=codeBg,coltext=codeFg,fontupper=\small\ttfamily,arc=3pt,outer arc=3pt,left=8pt,right=8pt,top=6pt,bottom=6pt,boxrule=0pt}
+
+% === LISTS ===
+\newlist{speclist}{itemize}{2}
+\setlist[speclist]{leftmargin=1.2em,itemsep=2pt,parsep=1pt,topsep=3pt,label={\color{accent}\textbullet}}
+\setlist[speclist,2]{label={\color{inkFaint}--},leftmargin=1.0em}
+\newlist{specenum}{enumerate}{2}
+\setlist[specenum]{leftmargin=1.4em,itemsep=2pt,parsep=1pt,topsep=3pt,label={\color{accent}\bfseries\arabic*.}}
+\setlist[specenum,2]{label={\color{inkMuted}\alph*.},leftmargin=1.2em}
+
+% === MACROS ===
+\newcommand{\requirement}[1]{\textcolor{accent}{\textsf{\textbf{#1}}}}
+\newcommand{\badge}[2]{\tikz[baseline=(X.base)]{\node[fill=#1!12,text=#1,rounded corners=2pt,inner xsep=3pt,inner ysep=1pt,font=\scriptsize\bfseries\sffamily](X){#2};}}
+\newcommand{\statusAccepted}{\badge{success}{ACCEPTED}}
+\newcommand{\statusNew}{\badge{accent}{NEW}}
+\newcommand{\lightrule}{{\color{border}\rule{\textwidth}{0.4pt}}}
+
+% FR Card environment
+\newcommand{\frcard}[6]{%
+\vspace{4pt}
+\noindent\begin{minipage}{\textwidth}
+\noindent\requirement{#1}~\textbf{#2}\\[2pt]
+{\small\color{inkSoft}#3}\\[3pt]
+{\small\color{inkMuted}\textsf{Trigger:}} {\small #4}\\[1pt]
+{\small\color{inkMuted}\textsf{Expected Behavior:}} {\small #5}\\[1pt]
+{\small\color{inkMuted}\textsf{Acceptance Criteria:}} {\small #6}
+\end{minipage}
+\vspace{4pt}\lightrule\vspace{2pt}
+}
+
+% US Card environment
+\newcommand{\uscard}[5]{%
+\vspace{3pt}
+\noindent\begin{minipage}{\textwidth}
+\requirement{#1}\quad{\small\textbf{#2}}\\[2pt]
+{\small\color{inkSoft}\textit{#3}}\\[3pt]
+{\small\color{inkMuted}\textsf{Expected Behavior:}} {\small #4}\\[1pt]
+{\small\color{inkMuted}\textsf{Design Justification:}} {\small #5}
+\end{minipage}
+\vspace{3pt}\lightrule\vspace{1pt}
+}
+
+% =============================================================================
+\begin{document}
+% === COVER ===
+\thispagestyle{empty}
+\begin{tikzpicture}[remember picture,overlay]
+  \fill[ink](current page.north west)rectangle([yshift=-6.8cm]current page.north east);
+  \shade[left color=accent,right color=accent!60!ink]([yshift=-6.8cm]current page.north west)rectangle([yshift=-7.05cm]current page.north east);
+  \foreach \x in {0,0.8,...,22}{\draw[white,opacity=0.03,line width=0.3pt]([xshift=\x cm]current page.north west)--([xshift=\x cm,yshift=-6.8cm]current page.north west);}
+\end{tikzpicture}
+\vspace*{0.8cm}
+\begin{tikzpicture}\fill[accent](0,0)rectangle(0.35cm,0.35cm);\fill[accent!60](0.45cm,0)rectangle(0.8cm,0.35cm);\end{tikzpicture}
+\vspace{0.5cm}
+
+{\fontsize{30}{36}\selectfont\bfseries\color{white}Lidox Platform}\\[8pt]
+{\fontsize{13}{17}\selectfont\color{accentMid}Assignment 1: Requirements Engineering, Architecture \& Proof of Concept}\\[3pt]
+{\fontsize{9.5}{13}\selectfont\color{inkFaint}Collaborative Document Editor with AI Writing Assistant}
+
+\vspace{3.6cm}
+\begin{tikzpicture}\draw[border,line width=0.4pt](0,0)--(\textwidth,0);\end{tikzpicture}
+\vspace{0.5cm}
+
+\noindent
+\begin{minipage}[t]{0.32\textwidth}{\scriptsize\color{inkFaint}\textsf{VERSION}}\\[2pt]{\small\color{ink}\textsf{3.0 --- Final}}\end{minipage}%
+\begin{minipage}[t]{0.32\textwidth}{\scriptsize\color{inkFaint}\textsf{DATE}}\\[2pt]{\small\color{ink}\textsf{April 2026}}\end{minipage}%
+\begin{minipage}[t]{0.36\textwidth}{\scriptsize\color{inkFaint}\textsf{COURSE}}\\[2pt]{\small\color{ink}\textsf{AI1220}}\end{minipage}
+
+\vspace{0.5cm}
+\noindent
+\begin{minipage}[t]{0.32\textwidth}{\scriptsize\color{inkFaint}\textsf{TEAM}}\\[2pt]{\small\color{ink}\textsf{Lidox Engineering}}\end{minipage}%
+\begin{minipage}[t]{0.32\textwidth}{\scriptsize\color{inkFaint}\textsf{COMPLIANCE}}\\[2pt]{\small\color{ink}\textsf{ISO 27001, ISO 25010}}\\{\small\color{ink}\textsf{RFC 6455, 6749, 7519, 8446}}\end{minipage}%
+\begin{minipage}[t]{0.36\textwidth}{\scriptsize\color{inkFaint}\textsf{DIAGRAMS}}\\[2pt]{\small\color{ink}\textsf{draw.io / Mermaid}}\\{\small\color{ink}\textsf{(source files attached)}}\end{minipage}
+
+\newpage\tableofcontents\newpage
+
+% #############################################################################
+% PART 1: REQUIREMENTS ENGINEERING
+% #############################################################################
+\part*{\color{accent}Part 1: Requirements Engineering}
+\addcontentsline{toc}{part}{Part 1: Requirements Engineering}
+
+% =====================================================================
+\section{Stakeholder Analysis}
+
+{\small
+\begin{tabularx}{\textwidth}{@{}>{\bfseries\raggedright}p{2.2cm}Xp{3.5cm}@{}}
+\toprule
+\textsf{Stakeholder} & \textsf{Goals / Concerns} & \textsf{Influence on Requirements} \\
+\midrule
+Product Owner / Startup Founder &
+  \emph{Goal:} Deliver a competitive AI-powered editor with fast time-to-market and predictable unit economics.
+  \emph{Concern:} Runaway LLM API costs; feature delays; weak user adoption.
+  & Drives modular, API-first design; task-aware LLM budgeting; cost circuit breakers; iterative delivery. \\
+\addlinespace[3pt]
+End Users (Writers, Students, Teams) &
+  \emph{Goal:} Frictionless real-time collaboration, intuitive AI that preserves their voice.
+  \emph{Concern:} Data loss during edits, laggy sync, confusing AI rewrites, format corruption.
+  & Requires CRDT-based conflict resolution, $\le$150\,ms sync latency, AI-as-proposal UX, offline resilience. \\
+\addlinespace[3pt]
+Engineering Team (Developers) &
+  \emph{Goal:} Maintainable, testable codebase with clear service boundaries.
+  \emph{Concern:} Tight coupling between real-time and CRUD; hard-to-test AI features.
+  & Leads to separation of concerns, API-first contracts, mockable AI orchestration layer. \\
+\addlinespace[3pt]
+DevOps / SRE &
+  \emph{Goal:} High availability, horizontal scalability, full observability.
+  \emph{Concern:} WebSocket connection management at scale; database write storms from ephemeral presence data.
+  & Requires tiered state architecture (Redis for ephemeral, PostgreSQL for durable), isolated real-time infrastructure. \\
+\addlinespace[3pt]
+AI/LLM Provider (External Service) &
+  \emph{Goal:} Stable, efficient API consumption within rate limits.
+  \emph{Concern:} Burst traffic, oversized prompts, retry storms.
+  & Forces asynchronous AI processing with queue-backed execution, exponential backoff, token metering. \\
+\addlinespace[3pt]
+Enterprise Customers / Org Admins &
+  \emph{Goal:} Data security, compliance (ISO~27001), role-based access control, auditability.
+  \emph{Concern:} Data leakage to third-party LLMs, unauthorized access, ghost permission windows.
+  & Requires strong authentication with active revocation, document-level AI kill switch, configurable retention. \\
+\bottomrule
+\end{tabularx}
+}
+
+% =====================================================================
+\section{Functional Requirements}
+
+\begin{decisionbox}[Format Convention]
+\small Each requirement specifies: unique ID, description, triggering condition, expected system behavior, and acceptance criteria---per the assignment rubric.
+\end{decisionbox}
+
+\subsection{Area 1: Real-Time Collaboration}
+
+{\small\textit{High-level capability:} Multiple users simultaneously edit the same document with sub-second state synchronization, live presence awareness, and deterministic conflict resolution without data loss.}
+
+\frcard{FR-1.1}{State Synchronization (CRDT)}{The system shall synchronize document state across concurrent clients using a Conflict-free Replicated Data Type (CRDT) transmitted via persistent WebSocket connections (RFC~6455).}{A user types, deletes, or formats text in a shared document.}{The CRDT engine generates a local operation, applies it optimistically to the local editor state, and broadcasts the operation to all connected peers via the Real-Time Service. All replicas converge to an identical document state without coordination.}{Given 2+ concurrent editors making simultaneous edits to the same paragraph, the final document state is identical across all clients within 300\,ms (p99) and no characters are lost.}
+
+\frcard{FR-1.2}{Presence Broadcasting}{The system shall display real-time presence indicators (cursor position, active selection, user name, avatar color) for all connected collaborators.}{A user moves their cursor or changes their text selection.}{The client sends a lightweight presence update to the Real-Time Service via WebSocket. The service fans out the update to all other connected clients of that document via Redis Pub/Sub. Presence data is ephemeral (never written to the primary database).}{When User~A moves their cursor, User~B sees the updated cursor position within 200\,ms. When User~A disconnects, their cursor disappears within 60\,s (TTL expiry).}
+
+\frcard{FR-1.3}{Offline Reconciliation}{The client shall buffer local edits during network partitions and merge them deterministically upon reconnection.}{The client detects a WebSocket disconnection (network loss, server restart).}{Local CRDT operations are buffered in the browser's IndexedDB. Upon reconnection, the client sends buffered operations to the server and receives any missed remote operations. The CRDT merge algorithm resolves all conflicts deterministically without user intervention. If offline for $>$24\,h, the client receives a full compacted snapshot instead of incremental operations.}{A user edits 3 paragraphs while offline for 10 minutes. Upon reconnection, all offline edits appear in the document within 5\,s and no data from either the offline or online users is lost.}
+
+\subsection{Area 2: AI Writing Assistant}
+
+{\small\textit{High-level capability:} Users invoke contextual AI operations (rewrite, summarize, translate, restructure) on selected text. AI suggestions are presented as reviewable proposals anchored to CRDT state, with full format preservation and task-aware cost management.}
+
+\frcard{FR-2.1}{AI Invocation}{The user can invoke an AI operation on selected text via a contextual menu.}{The user selects text and chooses an AI action (rewrite, summarize, translate, restructure, grammar fix) from the toolbar or keyboard shortcut.}{The frontend captures the selected text, the CRDT node ID, and the current state vector. It sends the request to the Backend API, which routes it to the AI Orchestration Service. The AI service constructs a prompt using a task-aware token budget, enqueues the job, and returns an immediate acknowledgment with a task ID. The client shows a pending/loading state.}{The AI pending indicator appears within 300\,ms of invocation. The first token of the streamed response appears within 2\,s for selections under 1,000 words.}
+
+\frcard{FR-2.2}{AI Proposal Display (Diff UX)}{AI-generated text shall render as a reviewable diff proposal, not as an automatic replacement.}{The AI Orchestration Service completes processing and returns the generated text.}{The client renders the AI output as a tracked-change-style overlay: additions highlighted in green, deletions in red. The user can accept all, reject all, accept individual sentences, or manually edit the proposed text before committing. Proposals are anchored to CRDT node IDs (not character offsets) and include a conflict resolution mechanism: if the source text has been modified by a collaborator during AI processing, the proposal is marked ``stale'' and the user is prompted to regenerate.}{(1) The user can accept/reject an AI proposal. (2) Partial acceptance (individual sentences) works correctly. (3) A proposal generated against text that was concurrently edited by another user displays a ``stale'' indicator rather than silently applying.}
+
+\frcard{FR-2.3}{Rich-Text Preservation}{The AI pipeline shall preserve formatting (bold, italic, links, headings, lists, tables) through the prompt--response round trip.}{The user invokes an AI operation on formatted text.}{The ProseMirror-to-LLM serializer converts document nodes to a compact structured format with inline semantic tags. The AI response parser reconstructs ProseMirror nodes from the output, rejecting any output that violates the document schema. Tables are serialized as CSV-like representations; code blocks are passed verbatim.}{A paragraph containing bold text, a hyperlink, and an inline code span, when rewritten by the AI, retains all three formatting marks in the output.}
+
+\frcard{FR-2.4}{AI Restructure / Outline}{The user can ask the AI to restructure a document outline or reorder sections.}{The user selects multiple headings/sections and invokes ``Restructure.''}{The AI receives the full heading tree and section summaries (heading-bounded chunking). It returns a proposed new outline with reordered/renamed sections. The proposal shows a before/after outline diff. Acceptance rearranges the actual document nodes.}{Given a 5-section document, the AI produces a restructured outline. The user can preview the new order and accept or reject it. Upon acceptance, all content moves to the correct positions.}
+
+\subsection{Area 3: Document Management}
+
+{\small\textit{High-level capability:} Full document lifecycle management including creation, versioning, sharing with role-based permissions, and export to standard formats.}
+
+\frcard{FR-3.1}{Document Creation}{Users can create new documents with optional templates.}{The user clicks ``New Document'' from the dashboard.}{The system creates a new document record in PostgreSQL, initializes an empty CRDT state in Redis, assigns the creating user as Owner, and redirects to the editor view. The new document is immediately editable.}{A newly created document appears in the user's dashboard within 1\,s and is editable by the creator immediately.}
+
+\frcard{FR-3.2}{Version History \& Revert}{The system shall maintain document version history and allow authorized users to revert to any previous version.}{The user opens the version history panel or clicks ``Revert'' on a specific version.}{The system persists snapshots at configurable intervals (every 100 CRDT operations, every 5 minutes, or on explicit save). The version history panel shows timestamped snapshots with author attribution. Reverting replaces the current CRDT state with the snapshot state and broadcasts the change to all connected clients.}{(1) At least 10 historical versions are available for a document edited over 1 hour. (2) Reverting to a version from 30 minutes ago replaces the content for all connected users within 3\,s.}
+
+\frcard{FR-3.3}{Document Sharing \& Access Control}{Users can share documents with specific users or via link, with role-based permissions.}{The document owner opens the sharing panel and enters an email address or generates a share link with a specific role.}{The system creates a permission record linking the target user/link to the document with one of four roles: Owner, Editor, Commenter, or Viewer. Permissions are enforced on every API request and WebSocket message. Commenter role allows AI ``Analyze'' but disables ``Apply Changes.'' Viewer role disables all editing and AI invocation.}{(1) A user shared as ``Viewer'' cannot type in the editor. (2) A ``Commenter'' can invoke AI analysis but the ``Apply'' button is disabled. (3) Permission changes take effect within 60\,s for active sessions.}
+
+\frcard{FR-3.4}{Document Export}{The system shall export documents to PDF and DOCX formats.}{The user clicks ``Export'' and selects a format.}{The backend renders the current document state to the requested format. Unaccepted AI suggestions are rendered as margin annotations (tracked changes in DOCX, comment boxes in PDF). The exported file is returned as a downloadable binary.}{An exported DOCX file opens correctly in Microsoft Word with formatting intact. Unresolved AI proposals appear as tracked changes.}
+
+\subsection{Area 4: User Management}
+
+{\small\textit{High-level capability:} Secure authentication with federated SSO, short-lived tokens with active revocation, and role-based authorization enforced across all system boundaries.}
+
+\frcard{FR-4.1}{Authentication (Local + SSO)}{The system shall support email/password authentication and SSO via Google and GitHub.}{The user navigates to the login page and enters credentials or clicks an SSO button.}{Local credentials are validated against bcrypt-hashed passwords (cost factor $\ge$12). SSO follows the OAuth~2.0 Authorization Code flow (RFC~6749) with PKCE. Upon successful authentication, the server issues an access JWT (15-min TTL, HttpOnly Secure cookie) and an opaque refresh token (7-day TTL, stored server-side). The user is redirected to their dashboard.}{(1) A user can log in with email/password. (2) A user can log in with Google SSO. (3) The JWT cookie has \texttt{HttpOnly}, \texttt{Secure}, and \texttt{SameSite=Strict} flags.}
+
+\frcard{FR-4.2}{Session Management \& Token Revocation}{The system shall enforce short-lived sessions with active revocation capability.}{An admin revokes a user's access, or a user logs out, or a refresh token is reused (replay attack detected).}{The revoked JWT's \texttt{jti} is added to a Redis deny set (\texttt{SISMEMBER} check on every request). A Pub/Sub revocation event forces all Real-Time Service nodes to terminate the affected WebSocket connections within 5\,s. Refresh token rotation invalidates old tokens; reuse of an old token triggers revocation of the entire token family.}{(1) After revocation, the user's API requests return 401 within 15 minutes (JWT expiry). (2) The user's WebSocket connection is terminated within 60\,s (re-auth ping cycle). (3) Refresh token reuse triggers immediate session termination.}
+
+\frcard{FR-4.3}{Role Enforcement}{The system shall enforce four document-level roles: Owner, Editor, Commenter, Viewer.}{Any API request or WebSocket message that modifies document state or invokes AI.}{The Backend API and Real-Time Service check the requesting user's role against the required permission level for the action. Unauthorized actions return HTTP~403 or a WebSocket error frame. The AI Orchestration Service additionally checks whether the org admin has disabled AI for the document.}{(1) A Viewer attempting to send a CRDT operation receives a 403 error. (2) A Commenter invoking ``AI Rewrite'' receives a 403; invoking ``AI Analyze'' succeeds. (3) An Org Admin disabling AI for a document blocks all AI invocations for all roles.}
+
+
+% =====================================================================
+\section{Non-Functional Requirements}
+
+\subsection{Latency}
+\begin{speclist}
+\item \requirement{NFR-01} Keystroke propagation to connected peers: p50 $\le$80\,ms, p95 $\le$150\,ms, p99 $\le$300\,ms. \textit{Justification:} Research shows collaborative presence breaks at $>$200\,ms; $\le$150\,ms (p95) maintains the psychological illusion of instantaneous shared editing.
+\item \requirement{NFR-02} AI pending indicator: $\le$300\,ms. First token streaming: $\le$2\,s for tasks under 1,000 words. \textit{Justification:} $>$300\,ms without feedback causes users to re-click; $>$3\,s feels ``broken.''
+\item \requirement{NFR-03} Document load (up to 100 pages, broadband): $\le$1.5\,s to interactive. \textit{Justification:} Google's research shows 53\% of mobile users abandon sites that take $>$3\,s to load.
+\end{speclist}
+
+\subsection{Scalability}
+\begin{speclist}
+\item \requirement{NFR-04} 50 concurrent active editors per document without violating NFR-01.
+\item \requirement{NFR-05} 10,000 active documents and 100,000 authenticated users system-wide. \textit{Growth model:} Initial target supports classroom and small-enterprise scenarios. Horizontal scaling via Redis Cluster partitioning (by document ID) and stateless backend pods.
+\end{speclist}
+
+\subsection{Availability}
+\begin{speclist}
+\item \requirement{NFR-06} Core editing platform: 99.9\% monthly uptime (8.76\,h/year max downtime).
+\item \requirement{NFR-07} If the AI subsystem is unavailable, users can still create, edit, save, share, and export documents (graceful degradation). The AI toolbar shows a ``temporarily unavailable'' indicator.
+\item \requirement{NFR-08} During temporary real-time service failure, clients buffer edits locally in IndexedDB and auto-sync on reconnection. Users see a ``reconnecting'' indicator but are never locked out of their document.
+\end{speclist}
+
+\subsection{Security \& Privacy}
+\begin{speclist}
+\item \requirement{NFR-09} All data in transit: TLS~1.3 (RFC~8446). All data at rest: AES-256 (ISO~27001 compliance).
+\item \requirement{NFR-10} JWT access tokens: 15-min TTL. Active revocation latency: $\le$60\,s for WebSocket, $\le$15\,min for REST.
+\item \requirement{NFR-11} AI context sends minimum required data per task type. Raw prompt/response retained $\le$30 days (org-configurable to 0). Document data never sent to LLM if org admin disables AI. \textit{Privacy implication:} Sending content to third-party LLM APIs means the LLM provider may process/log that content. Org admins must be able to opt out entirely for sensitive documents.
+\end{speclist}
+
+\subsection{Usability}
+\begin{speclist}
+\item \requirement{NFR-12} When $>$10 collaborators are active, the presence UI collapses inactive cursors into a summary indicator (``+8 others'') to prevent clutter.
+\item \requirement{NFR-13} AI suggestions are always previewable proposals that can be accepted, rejected, or edited before insertion. The user is never surprised by automatic content changes.
+\item \requirement{NFR-14} WCAG~2.1 Level~AA compliance. The editor is keyboard-navigable. Screen readers announce AI proposal state changes (``AI suggestion available,'' ``suggestion accepted'').
+\end{speclist}
+
+
+% =====================================================================
+\section{User Stories and Scenarios}
+
+\begin{notebox}[Story Format]
+\small Each story includes expected system behavior and a design justification for non-obvious choices, per the rubric requirement.
+\end{notebox}
+
+\subsubsection*{Collaboration Scenarios}
+
+\uscard{US-01}{Presence Awareness}{As a collaborator, I want to see labeled cursors of other active users so I avoid overwriting their work.}{When a user opens a shared document, the Real-Time Service sends the current presence state of all connected users. Each collaborator's cursor is rendered with their display name and a unique color. Cursor positions update at up to 10\,Hz (server-throttled). When a user disconnects, their cursor disappears after the 60\,s TTL expires.}{Presence is broadcast via Redis Pub/Sub independently of document state to avoid write amplification on the primary database. Throttling to 10\,Hz prevents fan-out amplification in documents with 50 editors.}
+
+\uscard{US-02}{Offline Editing \& Reconnection}{As a commuter, I want to edit during a tunnel outage and have my changes seamlessly merge when I reconnect.}{The client detects disconnection and shows a ``Working offline'' banner. All local edits continue normally against the local CRDT state and are buffered in IndexedDB. Upon reconnection, buffered operations are sent to the server and remote operations are received. The CRDT merge algorithm resolves all conflicts deterministically. The ``offline'' banner disappears.}{We use CRDTs (not OT) specifically because they support offline-first merging without server round-trips. The 24-hour snapshot fallback prevents unbounded operation replay for long-offline clients.}
+
+\uscard{US-03}{Concurrent Same-Paragraph Editing}{As a co-author, I want to edit a paragraph simultaneously with a colleague without locking.}{Both users' keystrokes are applied locally via optimistic UI and broadcast via CRDT operations. The CRDT algorithm (Yjs/YATA) ensures character-level interleaving without paragraph-level locks. Neither user experiences any blocking or conflict dialog.}{Paragraph-level locking was rejected (ADR-02) because it destroys the collaborative experience. CRDTs allow true character-level concurrency at the cost of higher implementation complexity.}
+
+\uscard{US-04}{Version Revert During Active Editing}{As a team lead, I want to revert to a version from 2 hours ago, forcing a live refresh for all users.}{The user opens the version history panel, selects a snapshot, and clicks ``Revert.'' The server replaces the current CRDT state with the snapshot state, broadcasts the new state to all connected clients via WebSocket, and each client replaces its local editor state. All cursors reset to position 0. A version entry is created recording who reverted and when.}{A forced revert is disruptive by design---it is an emergency action. We broadcast the full replacement state rather than trying to compute a delta, because reverting to an old version may invalidate hundreds of intermediate CRDT operations.}
+
+\subsubsection*{AI Assistant Workflows}
+
+\uscard{US-05}{AI Summarization}{As a writer, I want to select a long section and ask the AI for a bulleted summary.}{The user selects text spanning multiple paragraphs and clicks ``Summarize'' from the AI toolbar. The system shows a loading indicator within 300\,ms. The AI Orchestration Service constructs a prompt using heading-bounded context (up to 8,000 tokens). The response streams back and renders as a diff proposal showing the original text and the proposed summary. The user can accept, reject, or edit before insertion.}{Summarization requires more context than grammar fixes. The task-aware token budget (8,000 for summarize vs.\ 800 for grammar) prevents hallucination from insufficient context while avoiding unnecessary cost for simple operations.}
+
+\uscard{US-06}{Partial AI Acceptance}{As an editor, I want to accept only specific sentences from an AI rewrite while rejecting others.}{The diff proposal renders each sentence as an independently selectable unit. The user clicks checkboxes next to individual sentences to include or exclude them. Clicking ``Apply Selected'' commits only the checked sentences to the CRDT state. Unchecked sentences are discarded.}{Partial acceptance is critical for maintaining authorial voice. The alternative---all-or-nothing acceptance---forces users to manually re-edit AI output, negating the productivity benefit.}
+
+\uscard{US-07}{AI Translation with Format Preservation}{As a researcher, I want to translate a section while preserving bolding and hyperlinks.}{The user selects formatted text and invokes ``Translate to [language].'' The structured serializer converts ProseMirror nodes to tagged format, preserving inline markers. The AI receives the tagged text with a system prompt instructing format preservation. The response parser reconstructs ProseMirror nodes with original formatting intact.}{We serialize to a compact tagged format (not Markdown) because Markdown introduces round-trip ambiguity (e.g., \texttt{*} vs.\ \texttt{\_} for italics). Tagged format tokenizes more predictably and preserves exact formatting markers.}
+
+\uscard{US-08}{AI Suggestion Becomes Stale During Collaboration}{As a user, I request an AI rewrite. While waiting for the result, my colleague edits the same paragraph. The AI suggestion arrives but is now based on outdated text.}{The system detects that the source text's SHA-256 hash no longer matches the current node content. Instead of silently applying the stale proposal, the system shows it with a yellow ``Stale: text has changed'' banner and a ``Regenerate'' button. The user can choose to regenerate with updated text or dismiss the proposal.}{Silently applying stale proposals would corrupt content---a trust-destroying failure. We anchor proposals to CRDT state vectors (ADR-06) rather than character offsets specifically to detect and handle this race condition.}
+
+\subsubsection*{Document Lifecycle}
+
+\uscard{US-09}{Share with Read-Only Access}{As a team lead, I share a document with a client as ``Viewer.'' They can read but not edit, invoke AI, or comment.}{The owner enters the client's email in the sharing panel and selects ``Viewer.'' The system creates a permission record. When the client opens the document, the editor renders in read-only mode: the cursor is non-interactive, the toolbar is disabled, and the AI menu is hidden.}{We enforce permissions at both the UI level (disabled controls) and the API level (403 on write attempts) for defense-in-depth. UI-only enforcement is insufficient because a technical user could send raw API requests.}
+
+\uscard{US-10}{Export with AI Annotations}{As a project manager, I export a document. Unresolved AI suggestions appear as tracked changes.}{The user clicks Export $\to$ DOCX. The backend iterates over any pending AI proposals and converts them to DOCX tracked-change markup (using \texttt{w:ins} and \texttt{w:del} elements). The resulting file opens in Microsoft Word with suggestions visible in the review pane.}{Discarding unresolved suggestions on export would lose work. Rendering them as tracked changes leverages an existing UX pattern that document reviewers already understand.}
+
+\subsubsection*{Access Control \& Roles}
+
+\uscard{US-11}{Commenter Invokes AI Analyze (Allowed) vs.\ AI Rewrite (Blocked)}{As a commenter, I can use AI to analyze text for my understanding, but I cannot apply changes to the document.}{The user with ``Commenter'' role selects text and opens the AI menu. ``Analyze'' and ``Explain'' options are available; ``Rewrite,'' ``Summarize,'' and ``Translate'' show a lock icon with tooltip ``Requires Editor role.'' If the commenter invokes ``Analyze,'' the AI response displays in a side panel (read-only) with no ``Apply to Document'' button.}{Commenters need AI for comprehension (analyzing complex text) but must not modify shared content. The role matrix differentiates between read-side AI (analysis) and write-side AI (rewrite/summarize). This granularity was requested by enterprise stakeholders.}
+
+\uscard{US-12}{Org Admin Disables AI for Confidential Documents}{As an Org Admin, I disable AI features for a specific document to prevent sensitive content from being sent to external LLM APIs.}{The admin opens the document settings panel and toggles ``AI Features'' to off. The system sets an \texttt{ai\_enabled=false} flag on the document record. All AI invocations for this document are immediately blocked at the API layer (returning 403 with message ``AI disabled by administrator''). The AI toolbar in the editor is hidden for all users.}{Enterprise customers handling legal, medical, or financial data cannot risk any content reaching third-party LLM providers. This toggle provides document-level granularity rather than org-wide, allowing mixed environments.}
+
+\uscard{US-13}{AI Interaction History Review}{As a professor, I want to review AI interaction history to understand how a section evolved and distinguish AI-generated from manually typed text.}{The version history panel includes an ``AI Activity'' tab showing: timestamp, user who invoked AI, task type (rewrite/summarize/translate), source text snippet, and whether the suggestion was accepted, rejected, or partially applied. AI-contributed text is subtly marked in the editor with a small indicator icon. The audit log retains this data for the org-configurable retention period.}{This supports academic integrity use cases and editorial review workflows. The retention policy balances auditability with GDPR Article~17 (right to erasure) obligations.}
+
+
+% =====================================================================
+\section{Requirements Traceability Matrix}
+
+\begin{notebox}[Component Legend]
+\small\textsf{C1:} Frontend App \quad \textsf{C2:} Backend API \quad \textsf{C3:} Sync Server \quad \textsf{C4:} AI Orchestration \quad \textsf{C5:} Auth/Identity \quad \textsf{C6:} PostgreSQL \quad \textsf{C7:} Object Storage \quad \textsf{C8:} Redis Cluster \quad \textsf{C9:} Job Queue
+\end{notebox}
+
+\vspace{2pt}
+{\footnotesize
+\begin{tabularx}{\textwidth}{@{}llXl@{}}
+\toprule
+\textsf{\textbf{Story}} & \textsf{\textbf{Func.\ Req.}} & \textsf{\textbf{Scenario}} & \textsf{\textbf{Components}} \\
+\midrule
+US-01 & FR-1.2 & Presence cursors & C1, C3, C8 \\
+US-02 & FR-1.1, FR-1.3 & Offline editing \& reconnection & C1, C3, C6, C8 \\
+US-03 & FR-1.1 & Concurrent same-paragraph editing & C1, C3, C8 \\
+US-04 & FR-3.2, FR-1.1 & Version revert during live session & C1, C2, C3, C6, C7 \\
+US-05 & FR-2.1, FR-2.2 & AI summarization with proposal UX & C1, C2, C4, C8, C9 \\
+US-06 & FR-2.2 & Partial AI acceptance & C1, C4 \\
+US-07 & FR-2.1, FR-2.3 & AI translation with formatting & C1, C2, C4, C9 \\
+US-08 & FR-2.2, FR-2.4 & Stale proposal / AI restructure & C1, C4, C8 \\
+US-09 & FR-3.3, FR-4.3 & Share as Viewer & C1, C2, C5, C6 \\
+US-10 & FR-3.4 & Export with AI annotations & C1, C2, C7 \\
+US-11 & FR-4.3, FR-2.1 & Commenter AI restrictions & C1, C2, C4, C5 \\
+US-12 & FR-2.1, FR-4.3 & Org Admin disables AI & C1, C2, C5, C6 \\
+US-13 & FR-3.2, FR-2.1 & AI interaction history audit & C1, C2, C6 \\
+\addlinespace[2pt]
+\multicolumn{4}{@{}l}{\color{inkMuted}\textit{Additional FR coverage (not mapped to a single story but covered by multiple):}} \\
+--- & FR-3.1 & Document creation & C1, C2, C6, C8 (via US-12, US-04) \\
+--- & FR-4.1 & Authentication (local + SSO) & C1, C2, C5, C6 (via US-09, US-11, US-12) \\
+--- & FR-4.2 & Session mgmt \& token revocation & C2, C5, C8 (via US-11, US-12) \\
+\bottomrule
+\end{tabularx}
+}
+
+
+% #############################################################################
+% PART 2: SYSTEM ARCHITECTURE
+% #############################################################################
+\newpage
+\part*{\color{accent}Part 2: System Architecture}
+\addcontentsline{toc}{part}{Part 2: System Architecture}
+
+% =====================================================================
+\section{Architectural Drivers}
+
+\begin{decisionbox}[Why This Ranking Matters]
+\small Two teams with different driver rankings should arrive at different architectures. Our ranking reflects a product where \emph{real-time collaboration reliability} is non-negotiable, \emph{AI quality/cost} is the primary business risk, and \emph{security} is the enterprise sales gate.
+\end{decisionbox}
+
+\noindent\textbf{Rank 1: Real-Time Collaboration Latency \& Reliability} {\small(NFR-01, NFR-06, NFR-08)}\\[2pt]
+{\small If sync is slow or lossy, the product is unusable regardless of AI quality. This driver forces: CRDT-based conflict resolution (ADR-02), a dedicated Real-Time Service separated from CRUD traffic (ADR-01), a tiered state architecture with Redis for ephemeral/warm data (ADR-05), and offline-first client design. Every infrastructure choice flows downstream from the $\le$150\,ms p95 latency target.}
+
+\vspace{6pt}
+\noindent\textbf{Rank 2: AI Integration Quality \& Cost Control} {\small(NFR-02, NFR-11, FR-2.1--2.4)}\\[2pt]
+{\small The AI assistant is the product differentiator but also the primary cost and reliability risk. This driver forces: task-aware token budgeting with model tiering (ADR: implicit in FR-2.1), asynchronous queue-backed execution (ADR-04), anchor-based proposal conflict resolution (ADR-06), and per-org cost circuit breakers. Without these, a single viral document can generate thousands of dollars in LLM costs in hours.}
+
+\vspace{6pt}
+\noindent\textbf{Rank 3: Security \& Compliance} {\small(NFR-09, NFR-10, FR-4.1--4.3)}\\[2pt]
+{\small Enterprise customers will not adopt a tool that fails security review. This driver forces: active JWT revocation with Redis deny set (ADR-07), document-level AI kill switch, TLS~1.3 everywhere, AES-256 at rest, and configurable data retention policies. The 60-second WebSocket revocation target specifically addresses ISO~27001 A.9.2.6.}
+
+\vspace{6pt}
+\noindent\textbf{Rank 4: Developer Velocity \& Maintainability} {\small(Stakeholder: Engineering Team)}\\[2pt]
+{\small A startup must ship fast. This driver forces: monorepo with shared type definitions, API-first contracts between services, mockable AI orchestration layer, and clear code ownership boundaries. It also informs our choice of proven technologies (React, NestJS, Yjs) over novel but risky alternatives.}
+
+
+% =====================================================================
+\section{System Design Using the C4 Model}
+
+\subsection{Level 1: System Context Diagram}
+
+The Lidox platform interacts with two actor types and four external services.
+
+\vspace{4pt}
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{context.png}
+\caption*{\small\color{inkMuted}Level 1: System Context Diagram \textsf{(Mermaid source: \texttt{diagrams/context.mmd})}}
+\end{figure}
+
+\subsection{Level 2: Container Diagram}
+
+\begin{warnbox}[Architectural Invariant: Data Tiering]
+\small Ephemeral data (presence, cursors) flows \textbf{only} through Redis (Tier~1). Active CRDT state is cached in Redis with async write-behind to PostgreSQL (Tier~2). Durable data (users, permissions, audit) flows \textbf{only} through PostgreSQL (Tier~3). Violating this tiering re-introduces the write-amplification vulnerability identified in the architectural review.
+\end{warnbox}
+
+\vspace{4pt}
+{\small Summary of containers:}
+
+\vspace{4pt}
+{\footnotesize
+\begin{tabularx}{\textwidth}{@{}lXll@{}}
+\toprule
+\textsf{\textbf{Container}} & \textsf{\textbf{Responsibility}} & \textsf{\textbf{Technology}} & \textsf{\textbf{Protocol}} \\
+\midrule
+C1: Frontend Web App & Editor UI, presence rendering, AI suggestion UX, offline buffering & React + TipTap (ProseMirror) & HTTPS, WebSocket \\
+C2: Backend API & REST endpoints, document CRUD, permissions, AI routing & Node.js / NestJS & HTTPS REST \\
+C3: Sync Server & WebSocket management, CRDT operation relay, presence fan-out & Node.js + Yjs + Hocuspocus & WebSocket \\
+C4: AI Orchestration & Prompt construction, task-aware budgeting, provider adapter, format parsing & Node.js / Python & Internal HTTP \\
+C5: Auth/Identity & JWT issuance, refresh rotation, deny set management & Passport.js + Redis & Internal \\
+C6: PostgreSQL & Users, documents, permissions, audit logs, AI interaction history & PostgreSQL 16 & TCP \\
+C7: Object Storage & Version snapshots, exported documents & S3-compatible & HTTPS \\
+C8: Redis Cluster & Presence (Tier~1), CRDT cache (Tier~2), deny set, Pub/Sub & Redis 7 Cluster & TCP \\
+C9: Job Queue & Async AI task execution, retries with exponential backoff & BullMQ on Redis & Internal \\
+\bottomrule
+\end{tabularx}
+}
+
+\vspace{4pt}
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{container.png}
+\caption*{\small\color{inkMuted}Level 2: Container Diagram \textsf{(Mermaid source: \texttt{diagrams/container.mmd})}}
+\end{figure}
+
+\subsection{Level 3: Component Diagram --- AI Orchestration Service (C4)}
+
+\begin{notebox}[Why AI Orchestration]
+\small We chose this container for Level~3 decomposition because it is the most architecturally complex: it touches frontend (proposal UX), backend (routing), database (audit), queue (async execution), and external services (LLM API).
+\end{notebox}
+
+\vspace{4pt}
+{\footnotesize
+\begin{tabularx}{\textwidth}{@{}lXl@{}}
+\toprule
+\textsf{\textbf{Component}} & \textsf{\textbf{Responsibility}} & \textsf{\textbf{Depends On}} \\
+\midrule
+Request Router & Receives AI invocation requests from C2. Validates user role and document AI-enabled flag. Routes to appropriate handler based on task type. & C2, C5, C6 \\
+\addlinespace[2pt]
+Context Builder & Extracts selected text + surrounding context from the CRDT state. Applies task-aware token budget (800--16,000 tokens). Strips CRDT metadata and collaboration artifacts. & C8 (CRDT cache) \\
+\addlinespace[2pt]
+Prompt Template Engine & Selects and hydrates prompt templates based on task type. Templates are stored as configurable YAML files (hot-reloadable without redeployment). Supports system prompt, user prompt, and few-shot examples. & Config store \\
+\addlinespace[2pt]
+Structured Serializer & Converts ProseMirror node trees to compact tagged format for LLM consumption. Converts tables to CSV-like representation. Handles the reverse: parsing LLM output back to ProseMirror nodes, rejecting schema-violating output. & --- \\
+\addlinespace[2pt]
+LLM Provider Adapter & Abstracts the LLM API call. Supports multiple providers (OpenAI, Anthropic, open-source). Routes tasks to appropriate model tier (fast/standard/premium). Handles streaming, retries (exponential backoff, 3 attempts), and timeout management. & External LLM \\
+\addlinespace[2pt]
+Token Metering \& Cost Engine & Counts input/output tokens using provider tokenizers. Logs per-request metrics. Maintains per-org cost accumulator. Triggers alerts at 80\% budget and hard-stop at 100\%. Enforces per-request ceiling (\$0.50 without confirmation). & C6, C8 \\
+\addlinespace[2pt]
+Proposal Manager & Packages the LLM response with the original CRDT state vector and source text hash. Performs conflict detection (match/rebase/stale). Manages proposal TTL (120\,s auto-dismiss). & C8 \\
+\addlinespace[2pt]
+Audit Logger & Records AI interactions: user ID, document ID, task type, token counts, cost, accept/reject status. Respects retention policy ($\le$30 days configurable). & C6 \\
+\bottomrule
+\end{tabularx}
+}
+
+\vspace{4pt}
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{component-ai.png}
+\caption*{\small\color{inkMuted}Level 3: AI Orchestration Service --- Component Diagram \textsf{(Mermaid source: \texttt{diagrams/component-ai.mmd})}}
+\end{figure}
+
+\subsection{Feature Decomposition}
+
+{\small Each module's responsibility, dependencies, and exposed interface:}
+
+\vspace{4pt}
+{\footnotesize
+\begin{tabularx}{\textwidth}{@{}l>{\raggedright}p{4.0cm}Xp{2.8cm}@{}}
+\toprule
+\textsf{\textbf{Module}} & \textsf{\textbf{Responsibility}} & \textsf{\textbf{Dependencies}} & \textsf{\textbf{Interface}} \\
+\midrule
+Rich-Text Editor (Frontend) & ProseMirror/TipTap editor rendering, toolbar actions, AI proposal overlay, offline IndexedDB buffer & TipTap, Yjs client, React state & React components; emits CRDT ops, AI invocation events \\
+\addlinespace[2pt]
+Real-Time Sync Layer (\texttt{sync-server}) & WebSocket connection management, CRDT operation relay, presence fan-out, reconnection handling, GC coordination & Yjs server (Hocuspocus), Redis Pub/Sub & WebSocket protocol; accepts/broadcasts CRDT ops and presence frames \\
+\addlinespace[2pt]
+AI Assistant Service & Prompt construction, LLM routing, response parsing, proposal lifecycle, cost metering (see Level~3 above) & Job Queue, LLM Provider, Redis, PostgreSQL & Internal REST API; accepts \texttt{POST /ai/invoke}, returns streaming events \\
+\addlinespace[2pt]
+Document Storage \& Versioning & Document CRUD, snapshot persistence, version history queries, export rendering & PostgreSQL, Object Storage, Redis (CRDT cache) & REST API endpoints for document lifecycle \\
+\addlinespace[2pt]
+Auth \& Authorization & Login/SSO flows, JWT issuance, refresh rotation, deny set management, role enforcement middleware & PostgreSQL (users, permissions), Redis (deny set), Identity Provider & Middleware; guards API routes and WebSocket connections \\
+\addlinespace[2pt]
+API Layer & REST endpoint routing, request validation (Zod schemas), error handling, rate limiting, OpenAPI documentation & NestJS framework, all service modules & HTTPS REST; OpenAPI spec at \texttt{/api/docs} \\
+\bottomrule
+\end{tabularx}
+}
+
+\subsection{AI Integration Design}
+
+\subsubsection{Context and Scope}
+The AI sees \textbf{only the minimum context required} for the task, never the full document by default. A ``Grammar Fix'' operation receives the selected text plus one sentence before/after (800 token ceiling). A ``Summarize'' operation receives the full heading-bounded section (8,000 tokens). A ``Full Document Analysis'' is the only task that sees the complete document (chunked at 16,000 tokens per request). This minimizes cost, latency, and data exposure to the LLM provider.
+
+For very long documents ($>$16K tokens), the system uses \textbf{heading-based chunking}: it splits the document at heading boundaries and processes each chunk separately, assembling the results on the client.
+
+\subsubsection{Suggestion UX}
+AI suggestions are presented as \textbf{tracked-change-style proposals}: additions highlighted green, deletions highlighted red, rendered inline in the editor. The user can accept all, reject all, accept individual sentences, or manually edit the proposal text. A side panel shows a clean ``before/after'' view. Proposals auto-dismiss after 120 seconds of inactivity to prevent ghost suggestions. Accepted suggestions are committed to the CRDT state as a single atomic operation; undo reverts the entire acceptance.
+
+\subsubsection{AI During Collaboration}
+We do \textbf{not} lock the region during AI processing. Other users can continue editing freely. When the AI result arrives, the anchor-based conflict resolution system (FR-2.2) detects whether the source text has changed. If unchanged: apply directly. If surrounding text changed: rebase offsets and show a ``Context Changed'' indicator. If the source text itself changed: mark as stale, prompt ``Regenerate?'' This was chosen over region-locking because locking a paragraph for 2--8 seconds in a multi-user session is unacceptably disruptive.
+
+\subsubsection{Prompt Design}
+Prompts are \textbf{template-based}, stored as YAML files in the repository under \texttt{packages/ai-service/prompts/}. Each template has a system prompt (persona, constraints), a user prompt (dynamic: selected text, context), and optional few-shot examples. Templates are hot-reloadable: changing a YAML file and restarting the AI service updates prompts without a full application redeployment. Future iteration: configurable prompts per organization.
+
+\subsubsection{Model and Cost Strategy}
+We use \textbf{tiered model routing}: fast models (e.g., Claude Haiku) for grammar/spelling (high frequency, low complexity), standard models (e.g., Claude Sonnet) for rewrite/translate/summarize, and premium models (e.g., Claude Opus) for full-document analysis. This reduces LLM API costs by an estimated 40--60\% versus a single-model approach. Cost management: per-org monthly budget with 80\% alert and 100\% hard-stop. Per-request ceiling of \$0.50 requires explicit user confirmation. Token counts are metered per request and surfaced in an admin dashboard.
+
+
+\subsection{API Design}
+
+\subsubsection{API Style}
+REST (JSON over HTTPS) for all CRUD operations and AI invocation. WebSocket (RFC~6455) for real-time CRDT sync and presence. AI long-running operations use a hybrid: the initial invocation is a REST \texttt{POST} that returns a task ID; results are streamed to the client via the existing WebSocket connection (event type: \texttt{ai:result}).
+
+\subsubsection{Endpoint Contracts}
+
+{\scriptsize
+\begin{tabularx}{\textwidth}{@{}llXl@{}}
+\toprule
+\textsf{\textbf{Method}} & \textsf{\textbf{Endpoint}} & \textsf{\textbf{Description}} & \textsf{\textbf{Auth}} \\
+\midrule
+\multicolumn{4}{@{}l}{\textbf{Document CRUD}} \\
+\texttt{POST} & \texttt{/api/documents} & Create document. Body: \texttt{\{title, templateId?\}}. Returns: \texttt{\{id, title, createdAt, role\}} & JWT \\
+\texttt{GET} & \texttt{/api/documents/:id} & Get document metadata + initial CRDT state snapshot. Returns: \texttt{\{id, title, ..., snapshot\}} & JWT+Role$\ge$Viewer \\
+\texttt{PATCH} & \texttt{/api/documents/:id} & Update metadata (title, settings). Body: \texttt{\{title?, aiEnabled?\}} & JWT+Role$\ge$Owner \\
+\texttt{DELETE} & \texttt{/api/documents/:id} & Soft-delete document. & JWT+Role=Owner \\
+\addlinespace[3pt]
+\multicolumn{4}{@{}l}{\textbf{Real-Time Session (WebSocket)}} \\
+\texttt{WS} & \texttt{/ws/documents/:id} & Upgrade to WebSocket. Auth via cookie JWT. Server sends initial state + presence. Client sends CRDT ops and presence updates. & JWT (cookie) \\
+\addlinespace[3pt]
+\multicolumn{4}{@{}l}{\textbf{AI Assistant}} \\
+\texttt{POST} & \texttt{/api/documents/:id/ai/invoke} & Invoke AI. Body: \texttt{\{task, selection, nodeId, stateVector\}}. Returns: \texttt{\{taskId, status:"queued"\}} & JWT+Role$\ge$Editor \\
+\texttt{GET} & \texttt{/api/documents/:id/ai/tasks/:taskId} & Poll task status (fallback if WS disconnected). Returns: \texttt{\{status, result?, error?\}} & JWT \\
+\addlinespace[3pt]
+\multicolumn{4}{@{}l}{\textbf{Sharing \& Permissions}} \\
+\texttt{POST} & \texttt{/api/documents/:id/share} & Share document. Body: \texttt{\{email, role\}}. Returns: \texttt{\{permissionId\}} & JWT+Role$\ge$Owner \\
+\texttt{GET} & \texttt{/api/documents/:id/permissions} & List all permissions for a document. & JWT+Role$\ge$Owner \\
+\texttt{DELETE} & \texttt{/api/documents/:id/permissions/:pid} & Revoke a permission. Triggers deny-set update. & JWT+Role=Owner \\
+\addlinespace[3pt]
+\multicolumn{4}{@{}l}{\textbf{User/Auth}} \\
+\texttt{POST} & \texttt{/api/auth/register} & Register. Body: \texttt{\{email, password, name\}} & None \\
+\texttt{POST} & \texttt{/api/auth/login} & Login. Body: \texttt{\{email, password\}}. Sets JWT + refresh cookies. & None \\
+\texttt{POST} & \texttt{/api/auth/refresh} & Rotate tokens. Uses refresh cookie. & Refresh token \\
+\texttt{GET} & \texttt{/api/auth/sso/:provider} & Initiate OAuth flow (Google/GitHub). & None \\
+\bottomrule
+\end{tabularx}
+}
+
+\subsubsection{Long-Running AI Operations}
+The client invokes AI via \texttt{POST /ai/invoke} and receives an immediate \texttt{202 Accepted} with a \texttt{taskId}. The AI result streams back through the WebSocket connection as \texttt{ai:chunk} events (for streaming) and an \texttt{ai:complete} event (final). If the WebSocket is disconnected, the client can poll \texttt{GET /ai/tasks/:taskId} as a fallback.
+
+\subsubsection{Error Handling Strategy}
+{\small
+\begin{tabularx}{\textwidth}{@{}llX@{}}
+\toprule
+\textsf{\textbf{HTTP Code}} & \textsf{\textbf{Meaning}} & \textsf{\textbf{Client Behavior}} \\
+\midrule
+\texttt{202} & AI task accepted, processing & Show loading indicator; wait for WebSocket events \\
+\texttt{400} & Malformed request (validation error) & Show inline form validation errors \\
+\texttt{401} & JWT expired or invalid & Silently attempt token refresh; if refresh fails, redirect to login \\
+\texttt{403} & Insufficient role / AI disabled & Show ``Permission denied'' toast with reason \\
+\texttt{429} & Rate limit or budget exceeded & Show ``AI quota exceeded'' banner with org admin contact \\
+\texttt{503} & AI service unavailable & Show ``AI temporarily unavailable'' with retry option; editing continues \\
+\texttt{504} & AI timeout ($>$30\,s) & Show ``AI request timed out'' with retry option \\
+\bottomrule
+\end{tabularx}
+}
+
+\subsection{Authentication \& Authorization}
+
+\textbf{Why authentication is needed:} The platform handles potentially sensitive document content shared among specific users. Without authentication, we cannot enforce role-based access, audit AI usage, or manage per-org billing.
+
+\textbf{User types:} Individual users (personal accounts), team members (invited to shared workspaces), and organization administrators (manage settings, AI policies, billing).
+
+\textbf{Role matrix:}
+
+\vspace{2pt}
+{\footnotesize
+\begin{tabularx}{\textwidth}{@{}l*{4}{c}@{}}
+\toprule
+\textsf{\textbf{Action}} & \textsf{\textbf{Owner}} & \textsf{\textbf{Editor}} & \textsf{\textbf{Commenter}} & \textsf{\textbf{Viewer}} \\
+\midrule
+View document & \checkmark & \checkmark & \checkmark & \checkmark \\
+Edit document & \checkmark & \checkmark & & \\
+Add comments & \checkmark & \checkmark & \checkmark & \\
+Invoke AI (write: rewrite, summarize, translate) & \checkmark & \checkmark & & \\
+Invoke AI (read: analyze, explain) & \checkmark & \checkmark & \checkmark & \\
+Revert version & \checkmark & \checkmark & & \\
+Share / manage permissions & \checkmark & & & \\
+Delete document & \checkmark & & & \\
+Disable AI for document & Org Admin & & & \\
+\bottomrule
+\end{tabularx}
+}
+
+\textbf{Privacy implications of LLM APIs:} Sending content to third-party LLM providers means the provider may process, log, or temporarily store that content. Mitigations: (1)~send minimum context per task; (2)~org admins can disable AI per document; (3)~AI interaction logs are retained for $\le$30 days (configurable to 0); (4)~system prompt instructs the LLM not to retain or learn from user content.
+
+\subsection{Communication Model}
+
+\textbf{Model:} Push-based real-time communication via persistent WebSocket connections. When a user edits the document, the CRDT operation is applied locally (optimistic UI) and sent to the Real-Time Service over WebSocket. The service relays the operation to all other connected clients. There is no polling.
+
+\textbf{Trade-offs:} WebSockets provide the lowest-latency bidirectional communication (critical for our $\le$150\,ms p95 target) but require persistent connections, which are more complex to scale horizontally than stateless HTTP. We accept this complexity because polling-based sync (Server-Sent Events + HTTP POST) would add 200--500\,ms of latency per keystroke, destroying the collaboration experience.
+
+\textbf{Document open:} When a user opens a shared document, the client (1)~fetches the initial document metadata via REST, (2)~upgrades to a WebSocket connection, (3)~receives the current CRDT state snapshot and presence state, (4)~renders the document and begins accepting edits.
+
+\textbf{Disconnection and reconnection:} On WebSocket disconnection, the client switches to offline mode: edits are applied locally and buffered in IndexedDB. A ``reconnecting'' banner is shown. On reconnection, buffered operations are replayed to the server, and missed remote operations are received. CRDT merge ensures consistency. If offline for $>$24\,h, the client receives a full compacted snapshot.
+
+
+% =====================================================================
+\section{Code Structure \& Repository Organization}
+
+\subsection{Monorepo Strategy}
+We use a \textbf{monorepo} (managed by Turborepo) for frontend, backend, shared types, and AI service. Justification for our team size ($\sim$4 developers): a monorepo enables atomic cross-cutting changes (e.g., an API contract change updates types, backend, and frontend in a single PR), eliminates version drift between packages, and simplifies CI/CD. Multi-repo would be appropriate for larger teams ($>$15) with independent deploy cadences.
+
+\subsection{Directory Layout}
+
+\vspace{4pt}
+\noindent\fcolorbox{codeBg}{codeBg}{\parbox{\dimexpr\textwidth-2\fboxsep-2\fboxrule}{%
+\color{codeFg}\small\ttfamily
+lidox/\\
+\hspace*{1em}apps/\\
+\hspace*{2em}web/ \hfill \color{inkFaint}\# React + TipTap frontend (Vite)\\
+\color{codeFg}\hspace*{3em}public/ \hfill \color{inkFaint}\# Static assets\\
+\color{codeFg}\hspace*{3em}src/ \hfill \color{inkFaint}\# Components, hooks, stores, lib\\
+\color{codeFg}\hspace*{2em}api/ \hfill \color{inkFaint}\# NestJS backend API\\
+\color{codeFg}\hspace*{3em}src/\\
+\color{codeFg}\hspace*{4em}auth/ \hfill \color{inkFaint}\# Login, SSO, JWT, refresh, guards\\
+\color{codeFg}\hspace*{4em}documents/ \hfill \color{inkFaint}\# CRUD, versioning, export\\
+\color{codeFg}\hspace*{4em}permissions/ \hfill \color{inkFaint}\# Sharing, role enforcement\\
+\color{codeFg}\hspace*{4em}ai/ \hfill \color{inkFaint}\# AI routing, orchestration\\
+\color{codeFg}\hspace*{4em}middleware/ \hfill \color{inkFaint}\# Auth guard, rate limiter\\
+\color{codeFg}\hspace*{2em}sync-server/ \hfill \color{inkFaint}\# Hocuspocus + Yjs WebSocket server\\
+\color{codeFg}\hspace*{3em}src/ \hfill \color{inkFaint}\# Extensions: auth, persistence, presence\\
+\color{codeFg}\hspace*{1em}packages/\\
+\hspace*{2em}types/ \hfill \color{inkFaint}\# Shared TypeScript interfaces, Zod schemas\\
+\color{codeFg}\hspace*{1em}diagrams/ \hfill \color{inkFaint}\# Mermaid source files (.mmd)\\
+\color{codeFg}\hspace*{1em}docs/ \hfill \color{inkFaint}\# ADRs, decisions, specs\\
+\color{codeFg}\hspace*{1em}docker-compose.yml \hfill \color{inkFaint}\# Local dev (PostgreSQL, Redis)\\
+\color{codeFg}\hspace*{1em}.env.example \hfill \color{inkFaint}\# Template (no secrets)\\
+\color{codeFg}\hspace*{1em}turbo.json \hfill \color{inkFaint}\# Turborepo pipeline config\\
+\color{codeFg}\hspace*{1em}README.md \hfill \color{inkFaint}\# Setup guide, architecture overview%
+}}\vspace{4pt}
+
+\subsection{Shared Code}
+The \texttt{packages/types} package contains TypeScript interfaces and Zod validation schemas shared between frontend and backend. This ensures API request/response types are validated at compile time and runtime on both sides. Shared types are imported as a workspace dependency (\texttt{"@lidox/types": "workspace:*"}).
+
+\subsection{Configuration \& Secrets Management}
+API keys, database connection strings, and LLM provider credentials are stored as environment variables, never committed to the repository. \texttt{.env.example} documents required variables with placeholder values. In production: secrets are injected via Kubernetes Secrets or a vault service (e.g., HashiCorp Vault). The \texttt{.gitignore} includes \texttt{.env*} (except \texttt{.env.example}).
+
+\subsection{Testing Structure}
+Tests are co-located with source code (\texttt{*.spec.ts} next to \texttt{*.ts}). Three test levels: \textbf{Unit tests} (Jest)---pure functions, serializer, prompt builder. \textbf{Integration tests} (Supertest)---API endpoint contracts validated against shared Zod schemas. \textbf{E2E tests} (Playwright)---frontend-to-backend flows (document creation, AI invocation). AI integration tests use \textbf{recorded fixtures} (saved LLM responses) to avoid real API calls and cost during CI.
+
+
+% =====================================================================
+\section{Data Model}
+
+\subsection{Entity-Relationship Overview}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{erd.png}
+\caption*{\small\color{inkMuted}Entity-Relationship Diagram \textsf{(Mermaid source: \texttt{diagrams/erd.mmd})}}
+\end{figure}
+
+\subsection{Table Definitions}
+
+{\scriptsize
+\begin{tabularx}{\textwidth}{@{}lXl@{}}
+\toprule
+\textsf{\textbf{Table}} & \textsf{\textbf{Key Columns}} & \textsf{\textbf{Notes}} \\
+\midrule
+\texttt{users} & \texttt{id} (UUID PK), \texttt{email} (unique), \texttt{password\_hash}, \texttt{name}, \texttt{avatar\_url}, \texttt{org\_id} (FK), \texttt{created\_at} & SSO users have null \texttt{password\_hash} \\
+\texttt{organizations} & \texttt{id} (UUID PK), \texttt{name}, \texttt{ai\_budget\_cents}, \texttt{ai\_budget\_used\_cents}, \texttt{ai\_retention\_days} & Org-level AI settings \\
+\texttt{documents} & \texttt{id} (UUID PK), \texttt{title}, \texttt{owner\_id} (FK$\to$users), \texttt{ai\_enabled} (bool), \texttt{created\_at}, \texttt{updated\_at}, \texttt{deleted\_at} & Soft-delete; \texttt{ai\_enabled} for admin toggle \\
+\texttt{document\_versions} & \texttt{id} (UUID PK), \texttt{document\_id} (FK), \texttt{snapshot\_url} (S3 path), \texttt{crdt\_clock}, \texttt{created\_by} (FK), \texttt{created\_at} & Snapshot stored in Object Storage \\
+\texttt{permissions} & \texttt{id} (UUID PK), \texttt{document\_id} (FK), \texttt{user\_id} (FK, nullable), \texttt{link\_token} (nullable), \texttt{role} (enum: owner/editor/commenter/viewer), \texttt{created\_at} & Nullable \texttt{user\_id} for link-based sharing \\
+\texttt{ai\_interactions} & \texttt{id} (UUID PK), \texttt{document\_id} (FK), \texttt{user\_id} (FK), \texttt{task\_type} (enum), \texttt{input\_tokens}, \texttt{output\_tokens}, \texttt{model\_used}, \texttt{cost\_cents}, \texttt{status} (enum: accepted/rejected/partial/expired), \texttt{source\_text\_hash}, \texttt{created\_at} & Prompt/response text retained per org policy \\
+\texttt{refresh\_tokens} & \texttt{id} (UUID PK), \texttt{user\_id} (FK), \texttt{token\_hash}, \texttt{family\_id} (UUID), \texttt{expires\_at}, \texttt{used} (bool) & \texttt{family\_id} for rotation-based replay detection \\
+\bottomrule
+\end{tabularx}
+}
+
+\subsection{Versioning Strategy}
+Documents are not stored as monolithic text blobs. The \emph{live} document state is the CRDT state held in Redis (Tier~2), which is asynchronously persisted to PostgreSQL at $\le$5\,s intervals as a binary CRDT snapshot. Named \emph{version snapshots} are triggered by: every 100 CRDT operations, every 5 minutes of active editing, or explicit user action. Snapshots are stored in Object Storage (S3) and referenced by URL in the \texttt{document\_versions} table.
+
+\subsection{AI Interaction History}
+Every AI invocation creates a row in \texttt{ai\_interactions} recording the full audit trail: who invoked what, on which document, with what cost, and whether the result was accepted. This supports the professor use case (US-13) and org admin auditing. Raw prompt/response text is stored in a separate \texttt{ai\_interaction\_details} table with TTL-based auto-deletion per the org's \texttt{ai\_retention\_days} setting.
+
+
+% =====================================================================
+\section{Architecture Decision Records}
+
+\begin{adrcard}[ADR-01: Dedicated Real-Time Collaboration Service \hfill \statusAccepted]
+\small
+\begin{tabularx}{\textwidth}{@{}>{\bfseries\sffamily\color{inkMuted}}l>{\raggedright\arraybackslash}X@{}}
+Context & Real-time editing has fundamentally different latency requirements than standard CRUD. WebSocket connections are long-lived and stateful; REST endpoints are short-lived. Mixing them in one service couples their scaling and failure modes. \\
+Decision & Separate real-time synchronization into a dedicated service (C3) with its own scaling group. REST API (C2) is a separate service. \\
+Consequences & \textbf{+} Performance-critical traffic is isolated; each service scales independently. \textbf{--} Inter-service coordination adds complexity; document state must be accessible from both services. \\
+Alternatives & \emph{Single monolith}---simpler but latency-coupled. \emph{Polling-based sync}---inferior UX, higher server load. \\
+\end{tabularx}
+\end{adrcard}
+
+\begin{adrcard}[ADR-02: CRDT-Based Conflict Resolution (Yjs/YATA) \hfill \statusAccepted]
+\small
+\begin{tabularx}{\textwidth}{@{}>{\bfseries\sffamily\color{inkMuted}}l>{\raggedright\arraybackslash}X@{}}
+Context & The platform requires simultaneous multi-user editing without locks. The offline reconciliation requirement (FR-1.3) demands merge without server round-trips. \\
+Decision & Use Yjs (YATA algorithm) for its production maturity, compact binary encoding, TipTap integration, and native GC hooks. \\
+Consequences & \textbf{+} True concurrent editing without locks; offline-first by design. \textbf{--} Higher complexity; tombstone accumulation requires GC (NFR-07 defines triggers). \\
+Alternatives & \emph{OT}---requires central server for transformation, conflicts with offline-first. \emph{Pessimistic locking}---destroys collaboration UX. \emph{Last-write-wins}---causes data loss. \\
+\end{tabularx}
+\end{adrcard}
+
+\begin{adrcard}[ADR-03: AI Outputs as Reviewable Proposals (Not Auto-Replace) \hfill \statusAccepted]
+\small
+\begin{tabularx}{\textwidth}{@{}>{\bfseries\sffamily\color{inkMuted}}l>{\raggedright\arraybackslash}X@{}}
+Context & AI rewrites can be incorrect or tonally inappropriate. Auto-replacing content without consent is trust-destroying, especially in shared documents. \\
+Decision & All AI outputs render as tracked-change-style diff proposals requiring explicit user action (accept/reject/partial/edit) before CRDT commit. Proposals auto-dismiss after 120\,s. \\
+Consequences & \textbf{+} User maintains complete control; partial acceptance enables fine-grained editing. \textbf{--} Extra frontend complexity; users must take an additional action. \\
+Alternatives & \emph{Inline auto-replacement}---fast but risky in shared docs. \emph{Full-document auto-rewrite}---destructive as default. \\
+\end{tabularx}
+\end{adrcard}
+
+\begin{adrcard}[ADR-04: Async Queue-Backed AI Execution \hfill \statusAccepted]
+\small
+\begin{tabularx}{\textwidth}{@{}>{\bfseries\sffamily\color{inkMuted}}l>{\raggedright\arraybackslash}X@{}}
+Context & LLM responses range from 2--15\,s with unpredictable latency spikes and rate limits. Blocking threads on LLM calls would exhaust the connection pool. \\
+Decision & Route AI requests through a durable job queue (BullMQ on Redis). Client receives immediate \texttt{202} with task ID; results stream via WebSocket. Retries use exponential backoff with jitter. \\
+Consequences & \textbf{+} Core app never blocks on LLM latency; clean retry semantics; quota enforcement at queue level. \textbf{--} More infrastructure; client handles async status updates. \\
+Alternatives & \emph{Synchronous backend-to-LLM}---fragile. \emph{Direct client-to-LLM}---exposes API keys, bypasses audit. \\
+\end{tabularx}
+\end{adrcard}
+
+% =====================================================================
+% COMPLIANCE
+\section{Compliance \& Standards Cross-Reference}
+
+{\small
+\begin{tabularx}{\textwidth}{@{}lXl@{}}
+\toprule
+\textsf{\textbf{Standard}} & \textsf{\textbf{Applicability}} & \textsf{\textbf{Addressed In}} \\
+\midrule
+RFC 6455 (WebSocket) & Real-time CRDT transport, presence & FR-1.1, FR-1.2, C3 \\
+RFC 6749 (OAuth 2.0) & Federated auth (Google, GitHub SSO) & FR-4.1, C5 \\
+RFC 7519 (JWT) & Access token format and claims & FR-4.2 \\
+RFC 6819 (OAuth Threats) & Refresh token rotation, replay detection & FR-4.2 \\
+RFC 8446 (TLS 1.3) & Data-in-transit encryption & NFR-09 \\
+ISO/IEC 27001:2022 & InfoSec management, access revocation (A.9.2.6), encryption at rest & NFR-09, NFR-10, FR-4.2 \\
+ISO/IEC 25010:2023 & Software quality model & NFR-01 through NFR-14 \\
+WCAG 2.1 Level AA & Accessibility & NFR-14 \\
+GDPR Art.\ 17 & Right to erasure for AI interaction data & NFR-11 \\
+\bottomrule
+\end{tabularx}
+}
+
+% =====================================================================
+\section{Glossary}
+
+{\small
+\begin{tabularx}{\textwidth}{@{}>{\bfseries\sffamily}lX@{}}
+\toprule
+\textsf{Term} & \textsf{Definition} \\
+\midrule
+CRDT & Conflict-free Replicated Data Type. Concurrent updates across replicas converge without coordination. \\
+Yjs/YATA & Yjs is a CRDT framework; YATA is its underlying sequence algorithm. \\
+Tombstone & CRDT metadata marking a deletion. Persists until garbage-collected. \\
+State Vector & Per-actor logical clock vector tracking causal ordering of CRDT operations. \\
+Write-Behind & Cache pattern: writes target cache immediately, flush to DB asynchronously. \\
+Deny Set & Redis set of revoked JWT \texttt{jti} values. Checked via O(1) \texttt{SISMEMBER}. \\
+ProseMirror & Toolkit for rich-text editors. TipTap is built on ProseMirror. \\
+Exponential Backoff & Retry delay doubles per attempt with random jitter. \\
+BullMQ & Redis-based job queue for Node.js with retry and scheduling support. \\
+\bottomrule
+\end{tabularx}
+}
+
+\vfill\lightrule\vspace{6pt}
+\begin{center}
+\begin{tikzpicture}\fill[accent](0,0)rectangle(0.22cm,0.22cm);\fill[accent!50](0.3cm,0)rectangle(0.52cm,0.22cm);\end{tikzpicture}\\[4pt]
+{\small\color{inkMuted}\textsf{LIDOX ENGINEERING SPECIFICATION v3.0 --- Parts 1 \& 2}}\\[2pt]
+{\scriptsize\color{inkFaint}\textsf{April 2026 --- End of Document}}
+\end{center}
+
+\end{document}

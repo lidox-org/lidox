@@ -1,28 +1,14 @@
 const BASE_URL = '/api';
 
-let accessToken: string | null = null;
-
-export function setAccessToken(token: string | null) {
-  accessToken = token;
-}
-
-export function getAccessToken(): string | null {
-  return accessToken;
-}
-
-async function tryRefreshToken(): Promise<string | null> {
+async function tryRefreshToken(): Promise<boolean> {
   try {
     const res = await fetch(`${BASE_URL}/auth/refresh`, {
       method: 'POST',
       credentials: 'include',
     });
-    if (!res.ok) return null;
-    const data = await res.json();
-    const newToken = data.accessToken as string;
-    setAccessToken(newToken);
-    return newToken;
+    return res.ok;
   } catch {
-    return null;
+    return false;
   }
 }
 
@@ -35,12 +21,7 @@ export async function api<T = unknown>(
   options: FetchOptions = {},
 ): Promise<T> {
   const { skipAuth, ...init } = options;
-
   const headers = new Headers(init.headers);
-
-  if (!skipAuth && accessToken) {
-    headers.set('Authorization', `Bearer ${accessToken}`);
-  }
 
   if (
     init.body &&
@@ -57,10 +38,8 @@ export async function api<T = unknown>(
   if (res.status === 401 && !skipAuth) {
     const refreshed = await tryRefreshToken();
     if (refreshed) {
-      headers.set('Authorization', `Bearer ${refreshed}`);
       res = await fetch(url, { ...init, headers, credentials: 'include' });
     } else {
-      setAccessToken(null);
       window.location.href = '/login';
       throw new Error('Session expired');
     }

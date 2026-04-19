@@ -86,12 +86,12 @@ export class DocumentsService {
     }
 
     // aiEnabled changes require owner
-    if (input.aiEnabled !== undefined && ROLE_HIERARCHY[role] < ROLE_HIERARCHY['owner']) {
+    if (input.aiEnabled !== undefined && ROLE_HIERARCHY[role] < ROLE_HIERARCHY.owner) {
       throw new ForbiddenException('Only the owner can change AI settings');
     }
 
     // title changes require at least editor
-    if (input.title !== undefined && ROLE_HIERARCHY[role] < ROLE_HIERARCHY['editor']) {
+    if (input.title !== undefined && ROLE_HIERARCHY[role] < ROLE_HIERARCHY.editor) {
       throw new ForbiddenException('You need editor access to change the title');
     }
 
@@ -153,7 +153,7 @@ export class DocumentsService {
   /* ---------------------------------------------------------------- */
   async restoreVersion(docId: string, versionId: string, userId: string) {
     const role = await this.getUserRole(docId, userId);
-    if (!role || ROLE_HIERARCHY[role] < ROLE_HIERARCHY['editor']) {
+    if (!role || ROLE_HIERARCHY[role] < ROLE_HIERARCHY.editor) {
       throw new ForbiddenException('Editor access required to restore versions');
     }
 
