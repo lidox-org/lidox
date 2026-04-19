@@ -24,3 +24,9 @@ npm-debug.log*
 
 # Test coverage
 coverage/
+
+# Python
+__pycache__/
+.pytest_cache/
+.venv/
+*.pyc

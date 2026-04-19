@@ -180,6 +180,7 @@ To test collaboration locally:
 lidox/
 ├── apps/
 │   ├── api/            # NestJS backend (auth, documents, AI, WebSocket auth)
+│   ├── api-fastapi/    # FastAPI migration scaffold for Assignment 2 cutover
 │   ├── sync-server/    # Hocuspocus CRDT sync server
 │   └── web/            # React + Vite frontend
 ├── packages/
@@ -188,6 +189,10 @@ lidox/
 ├── docker-compose.yml
 └── turbo.json
 ```
+
+The active backend remains `apps/api` for now. `apps/api-fastapi` is a parallel
+migration target being ported incrementally so the team can move to FastAPI
+without breaking the working demo path in one rewrite.
 
 ---
 
