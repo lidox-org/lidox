@@ -32,6 +32,6 @@
 		}
 	},
 	"files": {
-		"ignore": ["docs/**/*.pdf", "package-lock.json"]
+		"ignore": ["docs/**/*.pdf", "package-lock.json", "apps/api-fastapi/**"]
 	}
 }
