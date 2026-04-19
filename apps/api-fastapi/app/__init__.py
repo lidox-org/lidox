@@ -1,0 +1,2 @@
+"""Lidox FastAPI migration app."""
+
