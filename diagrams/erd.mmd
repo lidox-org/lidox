@@ -36,7 +36,7 @@ erDiagram
     document_versions {
         uuid id PK
         uuid document_id FK
-        string snapshot_url "S3 path"
+        text snapshot "CRDT update as base64 (API schema)"
         int crdt_clock
         uuid created_by FK
         timestamp created_at

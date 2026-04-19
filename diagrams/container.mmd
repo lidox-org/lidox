@@ -1,30 +1,24 @@
 C4Container
-    title Lidox Platform - Container Diagram
+    title Lidox Platform - Container Diagram (PoC as implemented)
 
     Person(user, "User", "Edits documents, invokes AI")
 
     Container_Boundary(platform, "Lidox Platform") {
-        Container(web, "Frontend Web App", "React + TipTap", "Editor UI, presence rendering, AI suggestion UX, offline buffering")
-        Container(api, "Backend API", "NestJS", "REST endpoints, document CRUD, permissions, AI routing")
-        Container(sync, "Sync Server", "Hocuspocus + Yjs", "WebSocket management, CRDT relay, presence fan-out")
-        Container(ai, "AI Orchestration", "Node.js", "Prompt construction, task-aware budgeting, format parsing")
-        Container(queue, "Job Queue", "BullMQ on Redis", "Async AI task execution, retries with backoff")
-        ContainerDb(pg, "PostgreSQL", "PostgreSQL 16", "Users, documents, permissions, audit logs")
-        ContainerDb(redis, "Redis Cluster", "Redis 7", "Presence Tier 1, CRDT cache Tier 2, deny set, Pub/Sub")
-        ContainerDb(s3, "Object Storage", "S3-compatible", "Version snapshots, exported documents")
+        Container(web, "Frontend Web App", "React + TipTap + Vite", "Editor UI, presence, AI proposal UX (no offline buffer)")
+        Container(api, "Backend API", "NestJS", "REST: auth, documents, permissions, AI invoke + SSE stream")
+        Container(sync, "Sync Server", "Hocuspocus + Yjs", "WebSocket CRDT relay, awareness, debounced PG persistence")
+        Container(queue, "Job queue", "BullMQ on Redis", "AI task workers calling Groq (or mock)")
+        ContainerDb(pg, "PostgreSQL", "PostgreSQL 16", "Users, documents, permissions, versions, AI audit")
+        ContainerDb(redis, "Redis", "Redis 7", "Refresh-token deny set (API), optional sync auth checks")
     }
 
-    System_Ext(idp, "Identity Provider", "OAuth 2.0 / SSO")
-    System_Ext(llm, "External LLM Provider", "AI text processing")
+    System_Ext(llm, "Groq / LLM API", "HTTPS text generation")
 
-    Rel(user, web, "Uses", "HTTPS / WebSocket")
-    Rel(web, api, "API calls", "HTTPS REST")
-    Rel(web, sync, "Real-time sync", "WebSocket")
-    Rel(api, ai, "Submit AI task", "Internal HTTP")
-    Rel(ai, queue, "Enqueue job", "Redis")
-    Rel(queue, llm, "Prompt / response", "HTTPS")
-    Rel(sync, redis, "Ephemeral + CRDT state", "TCP")
-    Rel(api, pg, "Durable writes", "TCP")
-    Rel(api, s3, "Store snapshots", "HTTPS")
-    Rel(redis, pg, "Async write-behind", "TCP")
-    Rel(api, idp, "Authenticate", "OAuth 2.0")
+    Rel(user, web, "Uses", "HTTP")
+    Rel(web, api, "REST + SSE", "HTTPS via /api proxy")
+    Rel(web, sync, "Yjs sync", "WebSocket :3002")
+    Rel(api, queue, "Enqueue AI jobs", "Redis")
+    Rel(queue, llm, "Prompt / completion", "HTTPS")
+    Rel(api, pg, "Reads / writes", "TCP")
+    Rel(sync, pg, "Persist Yjs snapshots", "TCP")
+    Rel(api, redis, "Token deny set", "TCP")
