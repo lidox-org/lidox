@@ -28,11 +28,6 @@ class Settings(BaseSettings):
         alias="JWT_SECRET",
     )
     jwt_algorithm: str = "HS256"
-    jwt_expiration: str = Field(default="15m", alias="JWT_EXPIRATION")
-    refresh_token_expiration_days: int = Field(
-        default=7,
-        alias="REFRESH_TOKEN_EXPIRATION_DAYS",
-    )
     access_cookie_name: str = "access_token"
     refresh_cookie_name: str = "refresh_token"
 
@@ -51,3 +46,4 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
