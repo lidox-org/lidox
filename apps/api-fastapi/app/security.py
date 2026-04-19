@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from uuid import UUID
 
 import jwt
 from fastapi import HTTPException, Request, status
@@ -58,3 +59,12 @@ def decode_access_token(token: str) -> AuthContext:
         jti=str(payload["jti"]) if payload.get("jti") else None,
     )
 
+
+def parse_uuid(value: str, label: str) -> str:
+    try:
+        return str(UUID(value))
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid {label}",
+        ) from exc

@@ -5,6 +5,7 @@ from app.dependencies import CurrentUser
 from app.redis_client import ping_redis
 from app.db import ping_database
 from app.security import AuthContext
+from app.services import ensure_token_not_denied
 
 
 router = APIRouter(tags=["system"])
@@ -30,6 +31,7 @@ async def healthz() -> dict[str, object]:
     description="Temporary migration route used to verify JWT/cookie auth wiring before the full endpoint port.",
 )
 async def auth_check(current_user: AuthContext = CurrentUser) -> dict[str, object]:
+    await ensure_token_not_denied(current_user)
     return {
         "authenticated": True,
         "user": {
@@ -38,4 +40,3 @@ async def auth_check(current_user: AuthContext = CurrentUser) -> dict[str, objec
             "jti": current_user.jti,
         },
     }
-
