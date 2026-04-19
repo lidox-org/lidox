@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import type { DocumentRole } from '@lidox/types';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import {
@@ -16,7 +17,7 @@ interface DocumentItem {
   id: string;
   title: string;
   ownerId: string;
-  role: string;
+  role: DocumentRole;
   createdAt: string;
   updatedAt: string;
 }
@@ -200,9 +201,55 @@ export function Dashboard() {
               </div>
 
               {/* Doc info */}
-              <h3 className="truncate text-sm font-semibold text-ink group-hover:text-accent transition-default">
-                {doc.title}
-              </h3>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h3 className="truncate text-sm font-semibold text-ink group-hover:text-accent transition-default">
+                    {doc.title}
+                  </h3>
+                  <div className="mt-2 flex items-center gap-2">
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${getRoleBadgeClass(doc.role)}`}
+                    >
+                      {doc.role.charAt(0).toUpperCase() + doc.role.slice(1)}
+                    </span>
+                    <span className="text-[11px] text-muted">
+                      {doc.role === 'owner'
+                        ? 'Owned by you'
+                        : `Shared with you as ${doc.role}`}
+                    </span>
+                  </div>
+                </div>
+
+                {doc.role === 'owner' && (
+                  <div className="absolute right-3 top-3">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setMenuOpen(menuOpen === doc.id ? null : doc.id);
+                      }}
+                      className="rounded-md p-1.5 text-muted opacity-0 hover:bg-surface hover:text-ink group-hover:opacity-100 transition-default"
+                      title="Document actions"
+                    >
+                      <MoreHorizontal className="h-4 w-4" />
+                    </button>
+
+                    {menuOpen === doc.id && (
+                      <div
+                        className="absolute right-0 top-8 z-10 w-40 rounded-lg border border-border bg-white py-1 shadow-lg"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <button
+                          onClick={() => handleDelete(doc.id)}
+                          className="flex w-full items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-default"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          Delete
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
 
               <div className="mt-2 flex items-center gap-2">
                 {user?.avatarUrl ? (
@@ -221,34 +268,6 @@ export function Dashboard() {
                   {formatDate(doc.updatedAt)}
                 </div>
               </div>
-
-              {/* Menu button */}
-              <div className="absolute right-3 top-3">
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setMenuOpen(menuOpen === doc.id ? null : doc.id);
-                  }}
-                  className="rounded-md p-1.5 text-muted opacity-0 hover:bg-surface hover:text-ink group-hover:opacity-100 transition-default"
-                >
-                  <MoreHorizontal className="h-4 w-4" />
-                </button>
-
-                {menuOpen === doc.id && (
-                  <div
-                    className="absolute right-0 top-8 z-10 w-40 rounded-lg border border-border bg-white py-1 shadow-lg"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <button
-                      onClick={() => handleDelete(doc.id)}
-                      className="flex w-full items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-default"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      Delete
-                    </button>
-                  </div>
-                )}
-              </div>
             </div>
           ))}
         </div>
@@ -260,4 +279,17 @@ export function Dashboard() {
       )}
     </div>
   );
+}
+
+function getRoleBadgeClass(role: DocumentRole): string {
+  switch (role) {
+    case 'owner':
+      return 'bg-amber-50 text-amber-700';
+    case 'editor':
+      return 'bg-blue-50 text-blue-700';
+    case 'commenter':
+      return 'bg-emerald-50 text-emerald-700';
+    case 'viewer':
+      return 'bg-slate-100 text-slate-600';
+  }
 }

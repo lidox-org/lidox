@@ -11,16 +11,33 @@ import {
   Sparkles,
   AlertCircle,
   Square,
+  X,
 } from 'lucide-react';
 import type { AiTaskType, DocumentRole } from '@lidox/types';
 import type * as Y from 'yjs';
-import { api, getAccessToken } from '../lib/api';
+import { api, fetchWithAuthRetry } from '../lib/api';
 import {
   encodeStateVector,
   htmlToText,
   serializeCurrentSelection,
   type SerializedSelectionRange,
 } from './aiSelection';
+
+export interface AiRetryRequest {
+  id: number;
+  task: AiTaskType;
+  selection: SerializedSelectionRange;
+}
+
+export interface AiNotice {
+  kind: 'cancelled' | 'error';
+  title: string;
+  message: string;
+  retry?: {
+    task: AiTaskType;
+    selection: SerializedSelectionRange;
+  };
+}
 
 interface Props {
   editor: Editor | null;
@@ -42,6 +59,9 @@ interface Props {
     streaming: boolean;
     stale: boolean;
   } | null) => void;
+  onHistoryChange?: () => void;
+  onAiNoticeChange?: (notice: AiNotice | null) => void;
+  retryRequest?: AiRetryRequest | null;
 }
 
 const AI_ACTIONS: {
@@ -101,6 +121,9 @@ export function AiToolbar({
   aiEnabled,
   ydoc,
   onAiProposalChange,
+  onHistoryChange,
+  onAiNoticeChange,
+  retryRequest,
 }: Props) {
   const [visible, setVisible] = useState(false);
   const [position, setPosition] = useState({ top: 0, left: 0 });
@@ -109,6 +132,9 @@ export function AiToolbar({
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
   const selectedRangeRef = useRef<SerializedSelectionRange | null>(null);
+  const activeSelectionRef = useRef<SerializedSelectionRange | null>(null);
+  const activeTaskRef = useRef<AiTaskType | null>(null);
+  const handledRetryRequestRef = useRef<number | null>(null);
   const rafRef = useRef<number>();
   const availableActions = AI_ACTIONS.filter((action) =>
     isActionAvailable(action.minRole, documentRole, aiEnabled),
@@ -191,10 +217,21 @@ export function AiToolbar({
 
   const handleAction = async (task: AiTaskType) => {
     const selection = selectedRangeRef.current;
+    await runAction(task, selection);
+  };
+
+  const runAction = async (
+    task: AiTaskType,
+    selection: SerializedSelectionRange | null,
+  ) => {
     if (!selection || !selection.text.trim()) return;
 
+    selectedRangeRef.current = selection;
+    activeSelectionRef.current = selection;
+    activeTaskRef.current = task;
     setLoading(task);
     setError(null);
+    onAiNoticeChange?.(null);
 
     const sourceStateVector = encodeStateVector(ydoc);
     const readOnly = isReadTask(task);
@@ -209,6 +246,7 @@ export function AiToolbar({
           stateVector: sourceStateVector,
         }),
       });
+      onHistoryChange?.();
       setActiveTaskId(response.taskId);
       onAiProposalChange({
         taskId: response.taskId,
@@ -246,13 +284,20 @@ export function AiToolbar({
         streaming: false,
         stale: false,
       });
+      onHistoryChange?.();
       setVisible(false);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'AI failed';
       setError(msg);
       onAiProposalChange(null);
-      // Auto-clear error after 3s
-      setTimeout(() => setError(null), 3000);
+      onHistoryChange?.();
+      onAiNoticeChange?.(
+        buildAiNotice({
+          message: msg,
+          task,
+          selection,
+        }),
+      );
     } finally {
       setLoading(null);
       setActiveTaskId(null);
@@ -268,6 +313,19 @@ export function AiToolbar({
       });
       setError('AI generation cancelled');
       onAiProposalChange(null);
+      onHistoryChange?.();
+      if (activeTaskRef.current && activeSelectionRef.current) {
+        onAiNoticeChange?.({
+          kind: 'cancelled',
+          title: 'AI generation cancelled',
+          message:
+            'The in-progress suggestion was discarded. You can retry the same request.',
+          retry: {
+            task: activeTaskRef.current,
+            selection: activeSelectionRef.current,
+          },
+        });
+      }
       setVisible(false);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to cancel AI';
@@ -287,18 +345,14 @@ export function AiToolbar({
     const headers = new Headers({
       Accept: 'text/event-stream',
     });
-    const accessToken = getAccessToken();
-    if (accessToken) {
-      headers.set('Authorization', `Bearer ${accessToken}`);
-    }
 
-    const response = await fetch(
+    const response = await fetchWithAuthRetry(
       `/api/documents/${documentId}/ai/tasks/${taskId}/stream`,
       {
         method: 'GET',
         headers,
-        credentials: 'include',
       },
+      { redirectOnFailure: true },
     );
 
     if (!response.ok || !response.body) {
@@ -368,6 +422,17 @@ export function AiToolbar({
     return result;
   };
 
+  useEffect(() => {
+    if (!retryRequest) return;
+    if (retryRequest.id === handledRetryRequestRef.current) return;
+
+    handledRetryRequestRef.current = retryRequest.id;
+    selectedRangeRef.current = retryRequest.selection;
+    activeSelectionRef.current = retryRequest.selection;
+    activeTaskRef.current = retryRequest.task;
+    void runAction(retryRequest.task, retryRequest.selection);
+  }, [retryRequest]);
+
   if (!visible || availableActions.length === 0) return null;
 
   return (
@@ -416,7 +481,14 @@ export function AiToolbar({
         {error && (
           <div className="flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs text-red-600 shadow-md">
             <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" />
-            {error}
+            <span>{error}</span>
+            <button
+              onClick={() => setError(null)}
+              className="rounded p-0.5 text-red-400 hover:bg-red-50 hover:text-red-600 transition-default"
+              title="Dismiss AI message"
+            >
+              <X className="h-3 w-3" />
+            </button>
           </div>
         )}
       </div>
@@ -475,4 +547,20 @@ function toPreviewText(task: AiTaskType, content: string): string {
   }
 
   return htmlToText(content);
+}
+
+function buildAiNotice(input: {
+  message: string;
+  task: AiTaskType;
+  selection: SerializedSelectionRange;
+}): AiNotice {
+  return {
+    kind: 'error',
+    title: 'AI generation failed',
+    message: `${input.message}. The partial output was discarded before it was applied.`,
+    retry: {
+      task: input.task,
+      selection: input.selection,
+    },
+  };
 }

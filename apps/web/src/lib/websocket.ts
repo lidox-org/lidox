@@ -1,6 +1,6 @@
 import * as Y from 'yjs';
 import { HocuspocusProvider } from '@hocuspocus/provider';
-import { getAccessToken } from './api';
+import { ensureAccessToken, setAccessToken } from './api';
 
 // Derive the WebSocket URL from current page hostname so it works in any environment
 function getSyncUrl(): string {
@@ -25,13 +25,16 @@ export function getOrCreateProvider(documentId: string): HocuspocusProvider {
   if (existing) return existing;
 
   const doc = getOrCreateDoc(documentId);
-  const token = getAccessToken() ?? undefined;
 
   const provider = new HocuspocusProvider({
     url: getSyncUrl(),
     name: documentId,
     document: doc,
-    token,
+    token: async () =>
+      (await ensureAccessToken({
+        forceRefresh: true,
+        redirectOnFailure: false,
+      })) ?? '',
     // Reconnect automatically on disconnect
     broadcast: false,
     onConnect: () => {
@@ -42,6 +45,20 @@ export function getOrCreateProvider(documentId: string): HocuspocusProvider {
     },
     onAuthenticationFailed: ({ reason }) => {
       console.warn(`[ws] authentication failed: ${reason}`);
+
+      if (!shouldRetryAuth(reason)) {
+        return;
+      }
+
+      setAccessToken(null);
+      void ensureAccessToken({
+        forceRefresh: true,
+        redirectOnFailure: false,
+      }).then((token) => {
+        if (token) {
+          provider.connect();
+        }
+      });
     },
   });
 
@@ -67,4 +84,14 @@ export function destroyProvider(documentId: string): void {
 export function getAwareness(documentId: string) {
   const provider = providers.get(documentId);
   return provider?.awareness ?? null;
+}
+
+function shouldRetryAuth(reason: string): boolean {
+  const normalized = reason.toLowerCase();
+  return (
+    normalized.includes('token') ||
+    normalized.includes('authentication failed') ||
+    normalized.includes('authentication required') ||
+    normalized.includes('jwt')
+  );
 }

@@ -16,9 +16,20 @@ interface Props {
   isOpen: boolean;
   onClose: () => void;
   onRestore?: (versionId: string) => void;
+  canRestore?: boolean;
+  restoreAvailable?: boolean;
+  restoreReason?: string;
 }
 
-export function VersionHistory({ documentId, isOpen, onClose, onRestore }: Props) {
+export function VersionHistory({
+  documentId,
+  isOpen,
+  onClose,
+  onRestore,
+  canRestore = false,
+  restoreAvailable = false,
+  restoreReason = 'Version restore is not available in this build yet.',
+}: Props) {
   const [versions, setVersions] = useState<Version[]>([]);
   const [loading, setLoading] = useState(false);
   const [restoring, setRestoring] = useState<string | null>(null);
@@ -42,6 +53,8 @@ export function VersionHistory({ documentId, isOpen, onClose, onRestore }: Props
   }, [isOpen, fetchVersions]);
 
   const handleRestore = async (versionId: string) => {
+    if (!restoreAvailable || !canRestore) return;
+
     setRestoring(versionId);
     try {
       await api(`/documents/${documentId}/versions/${versionId}/restore`, {
@@ -99,6 +112,12 @@ export function VersionHistory({ documentId, isOpen, onClose, onRestore }: Props
         </button>
       </div>
 
+      {!restoreAvailable && (
+        <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800">
+          {restoreReason}
+        </div>
+      )}
+
       {/* Content */}
       <div className="flex-1 overflow-y-auto">
         {loading ? (
@@ -140,16 +159,28 @@ export function VersionHistory({ documentId, isOpen, onClose, onRestore }: Props
                       </p>
                       <button
                         onClick={() => handleRestore(version.id)}
-                        disabled={restoring !== null}
-                        className="flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-medium text-muted opacity-0 hover:bg-white hover:text-accent group-hover:opacity-100 transition-default disabled:opacity-50"
-                        title="Restore this version"
+                        disabled={
+                          restoring !== null || !restoreAvailable || !canRestore
+                        }
+                        className="flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-medium text-muted opacity-0 hover:bg-white hover:text-accent group-hover:opacity-100 transition-default disabled:cursor-not-allowed disabled:opacity-50"
+                        title={
+                          !restoreAvailable
+                            ? restoreReason
+                            : !canRestore
+                              ? 'Only editors can restore versions'
+                              : 'Restore this version'
+                        }
                       >
                         {restoring === version.id ? (
                           <Loader2 className="h-3 w-3 animate-spin" />
                         ) : (
                           <RotateCcw className="h-3 w-3" />
                         )}
-                        Restore
+                        {restoreAvailable
+                          ? canRestore
+                            ? 'Restore'
+                            : 'No Access'
+                          : 'Unavailable'}
                       </button>
                     </div>
 

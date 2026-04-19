@@ -9,6 +9,7 @@ import {
   RotateCcw,
   Loader2,
   AlertTriangle,
+  PencilLine,
 } from 'lucide-react';
 import { splitHtmlFragmentIntoSentences } from './aiSelection';
 
@@ -132,10 +133,19 @@ export function AiProposal({
 
   const [segments, setSegments] = useState(initialSegments);
   const [expanded, setExpanded] = useState(true);
+  const [editMode, setEditMode] = useState(false);
+  const [draftText, setDraftText] = useState(proposed);
 
   useEffect(() => {
     setSegments(initialSegments);
   }, [initialSegments]);
+
+  useEffect(() => {
+    setDraftText(proposed);
+    if (streaming) {
+      setEditMode(false);
+    }
+  }, [proposed, streaming]);
 
   const isReadTask = readOnly || taskType === 'analyze' || taskType === 'explain';
 
@@ -152,6 +162,19 @@ export function AiProposal({
   const handleAcceptAll = () => {
     if (isReadTask) {
       onAccept({ text: proposed, action: 'accept' });
+      return;
+    }
+
+    if (editMode) {
+      const normalizedDraft = draftText.trim();
+      if (!normalizedDraft) return;
+
+      const changed = normalizedDraft !== proposed.trim();
+      onAccept({
+        text: normalizedDraft,
+        action: changed ? 'partial' : 'accept',
+        html: changed ? undefined : proposedHtml,
+      });
       return;
     }
 
@@ -240,12 +263,29 @@ export function AiProposal({
                   {proposed || 'Waiting for the first chunk...'}
                 </div>
               </div>
+            ) : editMode && !isReadTask ? (
+              <div className="space-y-3">
+                <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">
+                  Review the suggestion, then adjust the final text before it is
+                  applied to the document.
+                </div>
+                <textarea
+                  value={draftText}
+                  onChange={(event) => setDraftText(event.target.value)}
+                  className="min-h-48 w-full rounded-xl border border-border px-3 py-2 text-sm text-ink focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+                />
+              </div>
             ) : isReadTask ? (
               <div className="text-sm leading-relaxed text-ink">
                 {proposed}
               </div>
             ) : (
-              <div className="space-y-0.5 text-sm leading-relaxed">
+              <div className="space-y-3">
+                <div className="rounded-lg border border-border bg-surface px-3 py-2 text-xs text-muted">
+                  Compare the original and the suggestion below. Click changed
+                  sentences to exclude them before applying.
+                </div>
+                <div className="space-y-0.5 text-sm leading-relaxed">
                 {segments.map((seg) => {
                   if (seg.type === 'unchanged') {
                     return (
@@ -282,26 +322,42 @@ export function AiProposal({
                       title="Click to toggle"
                     >
                       {seg.text}{' '}
-                    </span>
+                      </span>
                   );
                 })}
+                </div>
               </div>
             )}
           </div>
 
           {/* Actions */}
           <div className="flex items-center justify-between border-t border-border px-4 py-3">
-            {!isReadTask && (
-              <button
-                onClick={resetToggles}
-                disabled={streaming}
-                className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-muted hover:bg-surface hover:text-ink transition-default"
-              >
-                <RotateCcw className="h-3 w-3" />
-                Reset
-              </button>
+            {!isReadTask ? (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setEditMode((current) => !current)}
+                  disabled={streaming || stale}
+                  className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-muted hover:bg-surface hover:text-ink transition-default disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <PencilLine className="h-3 w-3" />
+                  {editMode ? 'Review Diff' : 'Edit Before Apply'}
+                </button>
+                <button
+                  onClick={() => {
+                    setEditMode(false);
+                    resetToggles();
+                    setDraftText(proposed);
+                  }}
+                  disabled={streaming}
+                  className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-muted hover:bg-surface hover:text-ink transition-default"
+                >
+                  <RotateCcw className="h-3 w-3" />
+                  Reset
+                </button>
+              </div>
+            ) : (
+              <div />
             )}
-            {isReadTask && <div />}
 
             <div className="flex items-center gap-2">
               <button
@@ -314,11 +370,19 @@ export function AiProposal({
               </button>
               <button
                 onClick={handleAcceptAll}
-                disabled={streaming || stale}
+                disabled={streaming || stale || (editMode && draftText.trim().length === 0)}
                 className="flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700 transition-default"
               >
                 <Check className="h-3 w-3" />
-                {streaming ? 'Generating...' : stale ? 'Regenerate Needed' : isReadTask ? 'Done' : 'Accept'}
+                {streaming
+                  ? 'Generating...'
+                  : stale
+                    ? 'Regenerate Needed'
+                    : isReadTask
+                      ? 'Done'
+                      : editMode
+                        ? 'Apply Edited Copy'
+                        : 'Accept'}
               </button>
             </div>
           </div>
