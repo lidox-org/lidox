@@ -1,0 +1,30 @@
+C4Container
+    title Lidox Platform - Container Diagram
+
+    Person(user, "User", "Edits documents, invokes AI")
+
+    Container_Boundary(platform, "Lidox Platform") {
+        Container(web, "Frontend Web App", "React + TipTap", "Editor UI, presence rendering, AI suggestion UX, offline buffering")
+        Container(api, "Backend API", "NestJS", "REST endpoints, document CRUD, permissions, AI routing")
+        Container(sync, "Sync Server", "Hocuspocus + Yjs", "WebSocket management, CRDT relay, presence fan-out")
+        Container(ai, "AI Orchestration", "Node.js", "Prompt construction, task-aware budgeting, format parsing")
+        Container(queue, "Job Queue", "BullMQ on Redis", "Async AI task execution, retries with backoff")
+        ContainerDb(pg, "PostgreSQL", "PostgreSQL 16", "Users, documents, permissions, audit logs")
+        ContainerDb(redis, "Redis Cluster", "Redis 7", "Presence Tier 1, CRDT cache Tier 2, deny set, Pub/Sub")
+        ContainerDb(s3, "Object Storage", "S3-compatible", "Version snapshots, exported documents")
+    }
+
+    System_Ext(idp, "Identity Provider", "OAuth 2.0 / SSO")
+    System_Ext(llm, "External LLM Provider", "AI text processing")
+
+    Rel(user, web, "Uses", "HTTPS / WebSocket")
+    Rel(web, api, "API calls", "HTTPS REST")
+    Rel(web, sync, "Real-time sync", "WebSocket")
+    Rel(api, ai, "Submit AI task", "Internal HTTP")
+    Rel(ai, queue, "Enqueue job", "Redis")
+    Rel(queue, llm, "Prompt / response", "HTTPS")
+    Rel(sync, redis, "Ephemeral + CRDT state", "TCP")
+    Rel(api, pg, "Durable writes", "TCP")
+    Rel(api, s3, "Store snapshots", "HTTPS")
+    Rel(redis, pg, "Async write-behind", "TCP")
+    Rel(api, idp, "Authenticate", "OAuth 2.0")
