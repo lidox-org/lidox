@@ -1,6 +1,7 @@
 import { Extension, onAuthenticatePayload } from '@hocuspocus/server';
 import * as jwt from 'jsonwebtoken';
 import Redis from 'ioredis';
+import { Pool } from 'pg';
 import { config } from '../config';
 
 interface JwtPayload {
@@ -22,9 +23,11 @@ interface JwtPayload {
 export class AuthExtension implements Extension {
   private redis: Redis | null = null;
   private redisReady = false;
+  private pool: Pool | null = null;
 
   constructor() {
     this.initRedis();
+    this.initPool();
   }
 
   private initRedis(): void {
@@ -53,6 +56,23 @@ export class AuthExtension implements Extension {
       });
     } catch (err) {
       console.warn('[auth] Could not initialise Redis client:', (err as Error).message);
+    }
+  }
+
+  private initPool(): void {
+    try {
+      this.pool = new Pool({
+        connectionString: config.DATABASE_URL,
+        max: 5,
+        idleTimeoutMillis: 30_000,
+        connectionTimeoutMillis: 5_000,
+      });
+
+      this.pool.on('error', (err) => {
+        console.warn('[auth] PostgreSQL pool error:', err.message);
+      });
+    } catch (err) {
+      console.warn('[auth] Could not initialise PostgreSQL pool:', (err as Error).message);
     }
   }
 
@@ -88,12 +108,21 @@ export class AuthExtension implements Extension {
       }
     }
 
+    const role = await this.getDocumentRole(data.documentName, payload.sub);
+
+    if (!role) {
+      throw new Error('Authentication failed: no permission for this document');
+    }
+
     // Populate connection context
-    data.connectionConfig.readOnly = false;
+    data.connectionConfig.readOnly = role === 'viewer' || role === 'commenter';
     data.context.userId = payload.sub;
     data.context.email = payload.email;
+    data.context.userRole = role;
 
-    console.log(`[auth] authenticated user=${payload.sub} email=${payload.email} doc=${data.documentName}`);
+    console.log(
+      `[auth] authenticated user=${payload.sub} role=${role} email=${payload.email} doc=${data.documentName}`,
+    );
   }
 
   async onDestroy(): Promise<any> {
@@ -101,31 +130,41 @@ export class AuthExtension implements Extension {
       await this.redis.quit().catch(() => {});
       this.redis = null;
     }
+    if (this.pool) {
+      await this.pool.end().catch(() => {});
+      this.pool = null;
+    }
   }
 
   /**
-   * Extract the JWT from the `token` query parameter or the `token` cookie.
+   * Extract the JWT from the access-token cookie.
    */
   private extractToken(data: onAuthenticatePayload): string | null {
-    // 1. Hocuspocus passes token from client-side provider
-    if (data.token) {
-      return data.token;
-    }
-
-    // 2. Query parameter
-    const url = data.requestParameters;
-    if (url) {
-      const tokenParam = url.get('token');
-      if (tokenParam) return tokenParam;
-    }
-
-    // 3. Cookie header
     const cookieHeader = data.requestHeaders?.cookie;
     if (cookieHeader) {
-      const match = cookieHeader.match(/(?:^|;\s*)token=([^;]+)/);
-      if (match) return match[1];
+      const match = cookieHeader.match(/(?:^|;\s*)access_token=([^;]+)/);
+      if (match) return decodeURIComponent(match[1]);
     }
 
     return null;
+  }
+
+  private async getDocumentRole(documentId: string, userId: string): Promise<string | null> {
+    if (!this.pool) {
+      throw new Error('Authentication failed: permission store unavailable');
+    }
+
+    const result = await this.pool.query<{ role: string }>(
+      `SELECT p.role
+         FROM permissions p
+         INNER JOIN documents d ON d.id = p.document_id
+        WHERE p.document_id = $1
+          AND p.user_id = $2
+          AND d.deleted_at IS NULL
+        LIMIT 1`,
+      [documentId, userId],
+    );
+
+    return result.rows[0]?.role ?? null;
   }
 }

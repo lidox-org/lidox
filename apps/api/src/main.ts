@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { resolve } from 'path';
+import { resolve } from 'node:path';
 import { config as dotenvConfig } from 'dotenv';
 
 // Load .env from monorepo root (two levels up from apps/api)

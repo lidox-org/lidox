@@ -40,11 +40,11 @@ export class AuthController {
 
     const result = await this.authService.register(parsed.data);
 
+    this.setAccessCookie(res, result.accessToken);
     this.setRefreshCookie(res, result.refreshToken);
 
     return {
       user: result.user,
-      accessToken: result.accessToken,
     };
   }
 
@@ -64,11 +64,11 @@ export class AuthController {
 
     const result = await this.authService.login(parsed.data);
 
+    this.setAccessCookie(res, result.accessToken);
     this.setRefreshCookie(res, result.refreshToken);
 
     return {
       user: result.user,
-      accessToken: result.accessToken,
     };
   }
 
@@ -91,9 +91,10 @@ export class AuthController {
 
     const result = await this.authService.refresh(rawToken);
 
+    this.setAccessCookie(res, result.accessToken);
     this.setRefreshCookie(res, result.refreshToken);
 
-    return { accessToken: result.accessToken };
+    return { user: result.user };
   }
 
   /* ---------------------------------------------------------------- */
@@ -171,10 +172,7 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    // Clear the refresh cookie
-    res.clearCookie('refresh_token', {
-      path: '/api/auth/refresh',
-    });
+    this.clearAuthCookies(res);
 
     return { message: 'Logged out' };
   }
@@ -182,13 +180,57 @@ export class AuthController {
   /* ---------------------------------------------------------------- */
   /*  Helper                                                           */
   /* ---------------------------------------------------------------- */
+  private setAccessCookie(res: Response, token: string) {
+    res.cookie('access_token', token, {
+      httpOnly: true,
+      secure: env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      path: '/',
+      maxAge: this.durationToMs(env.JWT_EXPIRATION),
+    });
+  }
+
   private setRefreshCookie(res: Response, token: string) {
     res.cookie('refresh_token', token, {
       httpOnly: true,
       secure: env.NODE_ENV === 'production',
-      sameSite: 'lax',
+      sameSite: 'strict',
       path: '/api/auth/refresh',
       maxAge: env.REFRESH_TOKEN_EXPIRATION_DAYS * 24 * 60 * 60 * 1000,
     });
+  }
+
+  private clearAuthCookies(res: Response) {
+    res.clearCookie('access_token', {
+      httpOnly: true,
+      secure: env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      path: '/',
+    });
+    res.clearCookie('refresh_token', {
+      httpOnly: true,
+      secure: env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      path: '/api/auth/refresh',
+    });
+  }
+
+  private durationToMs(duration: string): number {
+    const match = duration.match(/^(\d+)(ms|s|m|h|d)?$/);
+    if (!match) {
+      return 15 * 60 * 1000;
+    }
+
+    const value = Number.parseInt(match[1], 10);
+    const unit = match[2] ?? 'ms';
+    const multipliers: Record<string, number> = {
+      ms: 1,
+      s: 1000,
+      m: 60 * 1000,
+      h: 60 * 60 * 1000,
+      d: 24 * 60 * 60 * 1000,
+    };
+
+    return value * (multipliers[unit] ?? multipliers.m);
   }
 }

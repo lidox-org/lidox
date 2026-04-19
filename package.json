@@ -8,20 +8,26 @@
 	"scripts": {
 		"dev": "turbo run dev",
 		"build": "turbo run build",
-		"lint": "biome check --formatter-enabled=false --linter-enabled=false --organize-imports-enabled=false --no-errors-on-unmatched .",
-		"lint:fix": "biome check --write .",
-		"test": "turbo run test",
+		"lint": "biome check package.json turbo.json biome.json playwright.config.ts apps packages tests",
+		"lint:fix": "biome check --write package.json turbo.json biome.json playwright.config.ts apps packages tests",
+		"test": "npm run test:unit && npm run test:integration && npm run test:e2e",
+		"test:unit": "npm --workspace @lidox/api run test:unit",
+		"test:integration": "npm --workspace @lidox/api run test:integration",
+		"test:e2e": "playwright test",
+		"test:e2e:install": "playwright install --with-deps chromium",
 		"typecheck": "turbo run typecheck",
 		"db:up": "docker compose up -d",
 		"db:down": "docker compose down"
 	},
 	"devDependencies": {
+		"@playwright/test": "^1.59.1",
 		"@biomejs/biome": "^1.9.4",
 		"turbo": "^2.4.0",
 		"typescript": "^5.7.0"
 	},
 	"engines": {
-		"node": ">=20.0.0"
+		"node": ">=20.0.0",
+		"npm": ">=11.6.2"
 	},
 	"packageManager": "npm@11.6.2"
 }
