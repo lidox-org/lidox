@@ -22,13 +22,17 @@ export const AuthResponseSchema = z.object({
     name: z.string(),
     avatarUrl: z.string().nullable(),
   }),
-  accessToken: z.string(),
 });
 
 export type AuthResponse = z.infer<typeof AuthResponseSchema>;
 
 export const RefreshResponseSchema = z.object({
-  accessToken: z.string(),
+  user: z.object({
+    id: z.string().uuid(),
+    email: z.string().email(),
+    name: z.string(),
+    avatarUrl: z.string().nullable(),
+  }),
 });
 
 export type RefreshResponse = z.infer<typeof RefreshResponseSchema>;

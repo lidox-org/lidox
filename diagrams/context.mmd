@@ -1,17 +1,13 @@
 C4Context
-    title Lidox Platform - System Context Diagram
+    title Lidox Platform - System Context (PoC scope)
 
-    Person(users, "Collaborative Users", "Writers, students, teams who create, edit, share documents and invoke AI")
-    Person(admin, "Organization Admin", "Manages org settings, AI policy, access control")
+    Person(users, "Collaborative Users", "Create, edit, share documents and use AI assistance")
 
-    System(lidox, "Lidox Platform", "Real-time collaborative document editor with AI writing assistant")
+    System(lidox, "Lidox PoC", "Real-time collaborative editor with JWT auth, Yjs sync, and AI tools")
 
-    System_Ext(idp, "Identity Provider", "OAuth 2.0 / SSO via Google, GitHub")
-    System_Ext(llm, "External LLM Provider", "AI text processing: rewrite, summarize, translate")
-    System_Ext(email, "Email Service", "Invitation and notification delivery")
+    System_Ext(llm, "Groq (LLM)", "Model inference for AI actions")
 
-    Rel(users, lidox, "Create, edit, share, invoke AI")
-    Rel(admin, lidox, "Manage settings, AI policy")
-    Rel(lidox, idp, "Authenticate users", "OAuth 2.0")
-    Rel(lidox, llm, "Send prompts, receive AI output", "HTTPS")
-    Rel(lidox, email, "Send invitations, alerts", "SMTP")
+    Rel(users, lidox, "Uses web app", "HTTPS + WebSocket")
+    Rel(lidox, llm, "Generate text", "HTTPS")
+
+    %% OAuth, email invitations, and org-admin consoles are not wired in this repository.

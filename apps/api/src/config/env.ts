@@ -1,6 +1,6 @@
 export const env = {
   /** Server */
-  PORT: parseInt(process.env.API_PORT || '3001', 10),
+  PORT: Number.parseInt(process.env.API_PORT || '3001', 10),
   CORS_ORIGIN: process.env.CORS_ORIGIN || 'http://localhost:5173',
   NODE_ENV: process.env.NODE_ENV || 'development',
 
@@ -15,7 +15,7 @@ export const env = {
   /** JWT */
   JWT_SECRET: process.env.JWT_SECRET || 'dev-jwt-secret-change-in-production',
   JWT_EXPIRATION: process.env.JWT_EXPIRATION || '15m',
-  REFRESH_TOKEN_EXPIRATION_DAYS: parseInt(
+  REFRESH_TOKEN_EXPIRATION_DAYS: Number.parseInt(
     process.env.REFRESH_TOKEN_EXPIRATION_DAYS || '7',
     10,
   ),

@@ -1,5 +1,7 @@
 import { Worker, Job } from 'bullmq';
 import { Logger } from '@nestjs/common';
+import * as crypto from 'node:crypto';
+import Groq from 'groq-sdk';
 import { redis } from '../config/redis';
 import { db } from '../config/database';
 import { aiInteractions } from '../db/schema';

@@ -20,7 +20,7 @@ A real-time collaborative document editor with AI writing assistance, built as a
 ## Prerequisites
 
 - **Node.js** 20+
-- **npm** 10+
+- **Corepack** enabled so the repo uses **npm 11.6.2**
 - **Docker** + Docker Compose
 
 ---
@@ -32,7 +32,8 @@ A real-time collaborative document editor with AI writing assistance, built as a
 ```bash
 git clone <repo-url>
 cd lidox
-npm install
+corepack enable
+corepack npm install
 ```
 
 ### 2. Configure environment
@@ -83,6 +84,28 @@ Turborepo starts all three services in parallel:
 npm run db:down   # stop Docker containers
 ```
 
+### Testing
+
+```bash
+npm run lint
+npm run typecheck
+npm run test:unit
+npm run test:integration
+npm run test:e2e
+```
+
+Install the Playwright browser once before the first local e2e run:
+
+```bash
+npm run test:e2e:install
+```
+
+### Workflow
+
+- PRs must start from a GitHub issue and use issue-linked branch names.
+- Each PR must begin with a scope comment explaining what it addresses, what is out of scope, and how it was verified.
+- See `CONTRIBUTING.md` for the workflow contract and `DEVIATIONS.md` for current known Assignment 2 gaps.
+
 ---
 
 ## Features
@@ -114,8 +137,9 @@ npm run db:down   # stop Docker containers
 
 ### Version History
 
-- Automatic snapshots stored on each meaningful save
-- Browse and restore previous versions via the clock icon in the editor header
+- Automatic snapshots stored on each meaningful save (debounced persistence from the sync server)
+- Browse versions via the clock icon in the editor header
+- **Restore:** the API acknowledges restore; reloading Yjs content from a chosen snapshot into the live editor is **not fully wired**—see [`DEVIATIONS.md`](./DEVIATIONS.md)
 
 ### AI Writing Tools
 
@@ -132,7 +156,9 @@ Select any text (3+ characters) in the editor — a floating toolbar appears abo
 
 After processing, a proposal panel slides up at the bottom of the editor with a diff view (additions in green, removals in red). You can **Accept**, **Reject**, or **Dismiss** the proposal.
 
-AI jobs run asynchronously through a BullMQ queue with up to 5 concurrent workers. The frontend polls for completion (1s interval, 60s timeout). Each interaction is logged to the database with token counts and estimated cost.
+AI jobs run asynchronously through a BullMQ queue with up to 5 concurrent workers. The frontend receives results via **Server-Sent Events** (`GET .../ai/tasks/:taskId/stream`) after `invoke`, so proposal text can update incrementally until completion. Each interaction is logged to the database with token counts and estimated cost.
+
+**Documentation:** See [`DEVIATIONS.md`](./DEVIATIONS.md) for explicit course-spec deltas, and [`docs/`](./docs/) for JWT/auth, collaboration transport, AI flow, demo script, and Q&A notes.
 
 ---
 
@@ -174,7 +200,7 @@ lidox/
 - [x] Local email/password auth with JWT + rotating refresh tokens
 - [x] Token reuse detection + Redis deny set for revoked JTIs
 - [x] Document CRUD with role-based access control
-- [x] Version history with restore
+- [x] Version history (list + snapshots); restore **partially implemented** (see `DEVIATIONS.md`)
 - [x] Sharing UI with role assignment
 - [x] AI pipeline: 6 task types, Groq SDK, BullMQ queue, model routing
 - [x] AI proposal diff UX: accept / reject / dismiss

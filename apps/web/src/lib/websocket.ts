@@ -1,6 +1,5 @@
 import * as Y from 'yjs';
 import { HocuspocusProvider } from '@hocuspocus/provider';
-import { ensureAccessToken, setAccessToken } from './api';
 
 // Derive the WebSocket URL from current page hostname so it works in any environment
 function getSyncUrl(): string {
@@ -30,11 +29,6 @@ export function getOrCreateProvider(documentId: string): HocuspocusProvider {
     url: getSyncUrl(),
     name: documentId,
     document: doc,
-    token: async () =>
-      (await ensureAccessToken({
-        forceRefresh: true,
-        redirectOnFailure: false,
-      })) ?? '',
     // Reconnect automatically on disconnect
     broadcast: false,
     onConnect: () => {
@@ -50,15 +44,10 @@ export function getOrCreateProvider(documentId: string): HocuspocusProvider {
         return;
       }
 
-      setAccessToken(null);
-      void ensureAccessToken({
-        forceRefresh: true,
-        redirectOnFailure: false,
-      }).then((token) => {
-        if (token) {
-          provider.connect();
-        }
-      });
+      // Re-attempt connection — the server reads auth from cookies
+      setTimeout(() => {
+        provider.connect();
+      }, 2000);
     },
   });
 
