@@ -4,11 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "nest start --watch",
-    "build": "nest build",
+    "build": "node ../../node_modules/@nestjs/cli/bin/nest.js build",
     "start": "node dist/main.js",
     "typecheck": "tsc --noEmit",
-    "test": "node --test --import tsx ./test/**/*.test.ts",
-    "test:watch": "node --test --watch --import tsx ./test/**/*.test.ts"
+    "test": "NODE_ENV=test node --test --import tsx ./test/**/*.test.ts",
+    "test:watch": "NODE_ENV=test node --test --watch --import tsx ./test/**/*.test.ts"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.0",
