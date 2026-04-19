@@ -10,7 +10,7 @@ from app.http import (
 )
 from app.models import CreateDocumentInput, ShareDocumentInput, UpdateDocumentInput
 from app.security import AuthContext, parse_uuid
-from app.services import DocumentsService, PermissionsService
+from app.services import DocumentsService, PermissionsService, ensure_token_not_denied
 
 
 router = APIRouter(prefix="/documents", tags=["documents"])
@@ -20,16 +20,19 @@ permissions_service = PermissionsService(documents_service)
 
 @router.post("", response_model=DocumentOut, summary="Create a document")
 async def create_document(body: CreateDocumentInput, current_user: AuthContext = CurrentUser):
+    await ensure_token_not_denied(current_user)
     return await documents_service.create(body.title, current_user.user_id)
 
 
 @router.get("", response_model=list[DocumentWithRoleOut], summary="List accessible documents")
 async def list_documents(current_user: AuthContext = CurrentUser):
+    await ensure_token_not_denied(current_user)
     return await documents_service.list_for_user(current_user.user_id)
 
 
 @router.get("/{doc_id}", response_model=DocumentWithRoleOut, summary="Get a document")
 async def get_document(doc_id: str, current_user: AuthContext = CurrentUser):
+    await ensure_token_not_denied(current_user)
     return await documents_service.get_by_id(
         parse_uuid(doc_id, "document ID"),
         current_user.user_id,
@@ -42,6 +45,7 @@ async def update_document(
     body: UpdateDocumentInput,
     current_user: AuthContext = CurrentUser,
 ):
+    await ensure_token_not_denied(current_user)
     return await documents_service.update(
         parse_uuid(doc_id, "document ID"),
         body.model_dump(exclude_none=False),
@@ -55,6 +59,7 @@ async def update_document(
     summary="Soft delete a document",
 )
 async def delete_document(doc_id: str, current_user: AuthContext = CurrentUser):
+    await ensure_token_not_denied(current_user)
     await documents_service.soft_delete(
         parse_uuid(doc_id, "document ID"),
         current_user.user_id,
@@ -64,6 +69,7 @@ async def delete_document(doc_id: str, current_user: AuthContext = CurrentUser):
 
 @router.get("/{doc_id}/versions", response_model=list[VersionOut], summary="List document versions")
 async def list_versions(doc_id: str, current_user: AuthContext = CurrentUser):
+    await ensure_token_not_denied(current_user)
     return await documents_service.list_versions(
         parse_uuid(doc_id, "document ID"),
         current_user.user_id,
@@ -76,6 +82,7 @@ async def list_versions(doc_id: str, current_user: AuthContext = CurrentUser):
     summary="Restore a document version",
 )
 async def restore_version(doc_id: str, version_id: str, current_user: AuthContext = CurrentUser):
+    await ensure_token_not_denied(current_user)
     return await documents_service.restore_version(
         parse_uuid(doc_id, "document ID"),
         parse_uuid(version_id, "version ID"),
@@ -89,6 +96,7 @@ async def share_document(
     body: ShareDocumentInput,
     current_user: AuthContext = CurrentUser,
 ):
+    await ensure_token_not_denied(current_user)
     return await permissions_service.share(
         parse_uuid(doc_id, "document ID"),
         body.email,
@@ -103,6 +111,7 @@ async def share_document(
     summary="List document permissions",
 )
 async def list_permissions(doc_id: str, current_user: AuthContext = CurrentUser):
+    await ensure_token_not_denied(current_user)
     return await permissions_service.list_for_document(
         parse_uuid(doc_id, "document ID"),
         current_user.user_id,
@@ -118,6 +127,7 @@ async def revoke_permission(
     permission_id: str,
     current_user: AuthContext = CurrentUser,
 ):
+    await ensure_token_not_denied(current_user)
     return await permissions_service.revoke(
         parse_uuid(doc_id, "document ID"),
         parse_uuid(permission_id, "permission ID"),

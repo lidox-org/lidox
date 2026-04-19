@@ -10,7 +10,7 @@ from app.http import (
 )
 from app.models import ChangePasswordInput, LoginInput, RegisterInput, UpdateProfileInput
 from app.security import AuthContext, decode_access_token, extract_access_token
-from app.services import AuthService, duration_to_seconds
+from app.services import AuthService, duration_to_seconds, ensure_token_not_denied
 
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -72,16 +72,19 @@ async def refresh(request: Request, response: Response) -> dict:
 
 @router.get("/me", response_model=UserOut, summary="Current user")
 async def me(current_user: AuthContext = CurrentUser):
+    await ensure_token_not_denied(current_user)
     return await service.get_me(current_user.user_id)
 
 
 @router.patch("/me", response_model=UserOut, summary="Update profile")
 async def update_me(body: UpdateProfileInput, current_user: AuthContext = CurrentUser):
+    await ensure_token_not_denied(current_user)
     return await service.update_me(current_user.user_id, body.name)
 
 
 @router.post("/change-password", summary="Change password")
 async def change_password(body: ChangePasswordInput, current_user: AuthContext = CurrentUser) -> dict:
+    await ensure_token_not_denied(current_user)
     await service.change_password(
         current_user.user_id,
         body.currentPassword,
