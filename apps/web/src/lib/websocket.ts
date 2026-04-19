@@ -39,6 +39,15 @@ export function getOrCreateProvider(documentId: string): HocuspocusProvider {
     },
     onAuthenticationFailed: ({ reason }) => {
       console.warn(`[ws] authentication failed: ${reason}`);
+
+      if (!shouldRetryAuth(reason)) {
+        return;
+      }
+
+      // Re-attempt connection — the server reads auth from cookies
+      setTimeout(() => {
+        provider.connect();
+      }, 2000);
     },
   });
 
@@ -64,4 +73,14 @@ export function destroyProvider(documentId: string): void {
 export function getAwareness(documentId: string) {
   const provider = providers.get(documentId);
   return provider?.awareness ?? null;
+}
+
+function shouldRetryAuth(reason: string): boolean {
+  const normalized = reason.toLowerCase();
+  return (
+    normalized.includes('token') ||
+    normalized.includes('authentication failed') ||
+    normalized.includes('authentication required') ||
+    normalized.includes('jwt')
+  );
 }

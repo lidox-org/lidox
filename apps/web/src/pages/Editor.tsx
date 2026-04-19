@@ -15,8 +15,10 @@ import {
   Share2,
   Clock,
   Loader2,
-  Cloud,
-  CloudOff,
+  Sparkles,
+  Undo2,
+  Wifi,
+  WifiOff,
   Menu,
 } from 'lucide-react';
 
@@ -29,8 +31,13 @@ import {
 } from '../lib/websocket';
 
 import { EditorToolbar } from '../editor/EditorToolbar';
-import { AiToolbar } from '../editor/AiToolbar';
+import {
+  AiToolbar,
+  type AiNotice,
+  type AiRetryRequest,
+} from '../editor/AiToolbar';
 import { AiProposal } from '../editor/AiProposal';
+import { AiHistoryPanel } from '../editor/AiHistoryPanel';
 import { encodeStateVector, serializeRange } from '../editor/aiSelection';
 import { PresenceCursors } from '../editor/PresenceCursors';
 import { ShareDialog } from '../editor/ShareDialog';
@@ -72,19 +79,39 @@ export function Editor() {
   const [documentRole, setDocumentRole] = useState<DocumentRole | null>(null);
   const [aiEnabled, setAiEnabled] = useState(true);
   const [titleEditing, setTitleEditing] = useState(false);
-  const [connected, setConnected] = useState(false);
   const [loading, setLoading] = useState(true);
   const [shareOpen, setShareOpen] = useState(false);
-  const [historyOpen, setHistoryOpen] = useState(false);
+  const [activeSidebar, setActiveSidebar] = useState<'versions' | 'ai' | null>(
+    null,
+  );
   const [aiProposal, setAiProposal] = useState<AiProposalData | null>(null);
   const [saving, setSaving] = useState(false);
-  const [role, setRole] = useState<DocumentRole>('viewer');
+  const [aiHistoryRefreshKey, setAiHistoryRefreshKey] = useState(0);
+  const [aiNotice, setAiNotice] = useState<AiNotice | null>(null);
+  const [aiRetryRequest, setAiRetryRequest] = useState<AiRetryRequest | null>(
+    null,
+  );
+  const [undoAiChangeVisible, setUndoAiChangeVisible] = useState(false);
+  const [syncConnectionStatus, setSyncConnectionStatus] = useState<
+    'connecting' | 'connected' | 'disconnected'
+  >('connecting');
+  const [hasUnsyncedChanges, setHasUnsyncedChanges] = useState(false);
 
   const titleInputRef = useRef<HTMLInputElement>(null);
   const saveTitleTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+  const undoAiTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
 
   const ydoc = documentId ? getOrCreateDoc(documentId) : null;
   const provider = documentId ? getOrCreateProvider(documentId) : null;
+  const canEditDocument =
+    documentRole === 'owner' || documentRole === 'editor';
+  const canManagePermissions = documentRole === 'owner';
+  const syncStatus = getSyncStatus({
+    canEditDocument,
+    savingTitle: saving,
+    hasUnsyncedChanges,
+    syncConnectionStatus,
+  });
 
   // Set awareness user info
   useEffect(() => {
@@ -100,22 +127,55 @@ export function Editor() {
     });
   }, [provider, user]);
 
-  // Track connection status via HocuspocusProvider events
+  // Track connection and sync status via HocuspocusProvider events.
   useEffect(() => {
-    if (!provider) return;
+    if (!provider) {
+      setSyncConnectionStatus('disconnected');
+      setHasUnsyncedChanges(false);
+      return;
+    }
 
-    const onConnect = () => setConnected(true);
-    const onDisconnect = () => setConnected(false);
+    const onStatus = ({ status }: { status: string }) => {
+      if (status === 'connected') {
+        setSyncConnectionStatus('connected');
+        return;
+      }
 
-    provider.on('connect', onConnect);
-    provider.on('disconnect', onDisconnect);
+      if (status === 'connecting') {
+        setSyncConnectionStatus('connecting');
+        return;
+      }
 
-    // Set initial state
-    setConnected(provider.isConnected ?? false);
+      setSyncConnectionStatus('disconnected');
+    };
+
+    const onSynced = ({ state }: { state: boolean }) => {
+      if (state) {
+        setHasUnsyncedChanges(false);
+      }
+    };
+
+    const onUnsyncedChanges = (count: number) => {
+      setHasUnsyncedChanges(count > 0);
+    };
+
+    setSyncConnectionStatus(
+      provider.isConnected
+        ? 'connected'
+        : provider.status === 'connecting'
+          ? 'connecting'
+          : 'disconnected',
+    );
+    setHasUnsyncedChanges(provider.hasUnsyncedChanges ?? false);
+
+    provider.on('status', onStatus);
+    provider.on('synced', onSynced);
+    provider.on('unsyncedChanges', onUnsyncedChanges);
 
     return () => {
-      provider.off('connect', onConnect);
-      provider.off('disconnect', onDisconnect);
+      provider.off('status', onStatus);
+      provider.off('synced', onSynced);
+      provider.off('unsyncedChanges', onUnsyncedChanges);
     };
   }, [provider]);
 
@@ -193,6 +253,7 @@ export function Editor() {
             ]
           : []),
       ],
+      editable: canEditDocument,
       editorProps: {
         attributes: {
           class: 'focus:outline-none',
@@ -203,9 +264,15 @@ export function Editor() {
     [role, ydoc],
   );
 
+  useEffect(() => {
+    if (!editor) return;
+
+    editor.setEditable(canEditDocument);
+  }, [editor, canEditDocument]);
+
   const saveTitle = useCallback(
     async (newTitle: string) => {
-      if (!documentId || !newTitle.trim()) return;
+      if (!documentId || !newTitle.trim() || !canEditDocument) return;
       setSaving(true);
       try {
         await api(`/documents/${documentId}`, {
@@ -218,7 +285,7 @@ export function Editor() {
         setSaving(false);
       }
     },
-    [documentId],
+    [canEditDocument, documentId],
   );
 
   const handleTitleChange = (value: string) => {
@@ -273,8 +340,17 @@ export function Editor() {
           })
           .insertContentAt(aiProposal.anchorFrom, appliedContent)
           .run();
+
+        setUndoAiChangeVisible(true);
+        if (undoAiTimeoutRef.current) clearTimeout(undoAiTimeoutRef.current);
+        undoAiTimeoutRef.current = setTimeout(
+          () => setUndoAiChangeVisible(false),
+          8000,
+        );
       }
 
+      setAiNotice(null);
+      setAiHistoryRefreshKey((current) => current + 1);
       setAiProposal(null);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Proposal review failed';
@@ -295,7 +371,27 @@ export function Editor() {
       }),
     });
 
+    setAiNotice(null);
+    setAiHistoryRefreshKey((current) => current + 1);
     setAiProposal(null);
+  };
+
+  const handleUndoAiChange = () => {
+    if (!editor || !editor.can().undo()) return;
+    editor.chain().focus().undo().run();
+    setUndoAiChangeVisible(false);
+  };
+
+  const handleRetryAiNotice = () => {
+    if (!aiNotice?.retry) return;
+
+    setAiProposal(null);
+    setAiNotice(null);
+    setAiRetryRequest({
+      id: Date.now(),
+      task: aiNotice.retry.task,
+      selection: aiNotice.retry.selection,
+    });
   };
 
   if (loading) {
@@ -341,31 +437,42 @@ export function Editor() {
                 autoFocus
               />
             ) : (
-              <button
-                onClick={() => setTitleEditing(true)}
-                className="max-w-xs truncate rounded-md px-2 py-1 text-sm font-medium text-ink hover:bg-surface transition-default"
-                title="Click to rename"
-              >
-                {docTitle}
-              </button>
+              <>
+                {canEditDocument ? (
+                  <button
+                    onClick={() => setTitleEditing(true)}
+                    className="max-w-xs truncate rounded-md px-2 py-1 text-sm font-medium text-ink hover:bg-surface transition-default"
+                    title="Click to rename"
+                  >
+                    {docTitle}
+                  </button>
+                ) : (
+                  <span className="max-w-xs truncate px-2 py-1 text-sm font-medium text-ink">
+                    {docTitle}
+                  </span>
+                )}
+              </>
             )}
 
-            {saving && (
-              <span className="text-xs text-muted">Saving...</span>
+            {documentRole && (
+              <span
+                className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${getRoleBadgeClass(documentRole)}`}
+              >
+                {documentRole.charAt(0).toUpperCase() + documentRole.slice(1)}
+              </span>
             )}
           </div>
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Connection status */}
-          <div className="flex items-center gap-1.5">
-            {connected ? (
-              <Cloud className="h-4 w-4 text-green-500" />
+          <div className="flex items-center gap-1.5 rounded-full bg-surface px-2.5 py-1">
+            {syncConnectionStatus === 'disconnected' ? (
+              <WifiOff className="h-4 w-4 text-amber-600" />
             ) : (
-              <CloudOff className="h-4 w-4 text-red-400" />
+              <Wifi className="h-4 w-4 text-emerald-600" />
             )}
-            <span className="text-xs text-muted">
-              {connected ? 'Connected' : 'Offline'}
+            <span className={`text-xs font-medium ${syncStatus.toneClass}`}>
+              {syncStatus.label}
             </span>
           </div>
 
@@ -378,9 +485,13 @@ export function Editor() {
 
           {/* Version history toggle */}
           <button
-            onClick={() => setHistoryOpen(!historyOpen)}
+            onClick={() =>
+              setActiveSidebar((current) =>
+                current === 'versions' ? null : 'versions',
+              )
+            }
             className={`rounded-lg p-2 transition-default ${
-              historyOpen
+              activeSidebar === 'versions'
                 ? 'bg-accentLight text-accent'
                 : 'text-muted hover:bg-surface hover:text-ink'
             }`}
@@ -389,14 +500,29 @@ export function Editor() {
             <Clock className="h-4 w-4" />
           </button>
 
-          {/* Share button */}
           <button
-            onClick={() => setShareOpen(true)}
-            className="flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-sm font-semibold text-white hover:bg-indigo-700 transition-default"
+            onClick={() =>
+              setActiveSidebar((current) => (current === 'ai' ? null : 'ai'))
+            }
+            className={`rounded-lg p-2 transition-default ${
+              activeSidebar === 'ai'
+                ? 'bg-accentLight text-accent'
+                : 'text-muted hover:bg-surface hover:text-ink'
+            }`}
+            title="AI history"
           >
-            <Share2 className="h-3.5 w-3.5" />
-            Share
+            <Sparkles className="h-4 w-4" />
           </button>
+
+          {canManagePermissions && (
+            <button
+              onClick={() => setShareOpen(true)}
+              className="flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-sm font-semibold text-white hover:bg-indigo-700 transition-default"
+            >
+              <Share2 className="h-3.5 w-3.5" />
+              Share
+            </button>
+          )}
 
           {/* Mobile menu placeholder */}
           <button className="rounded-lg p-2 text-muted hover:bg-surface lg:hidden transition-default">
@@ -411,8 +537,22 @@ export function Editor() {
         <div className="flex flex-1 flex-col overflow-hidden">
           {/* Toolbar */}
           <div className="border-b border-border px-4 py-2">
-            <EditorToolbar editor={editor} />
+            <EditorToolbar
+              editor={editor}
+              disabled={!canEditDocument}
+              disabledReason={`${
+                documentRole === 'commenter' ? 'Commenter' : 'Viewer'
+              } access is read-only in the editor.`}
+            />
           </div>
+
+          {syncConnectionStatus === 'disconnected' && canEditDocument && (
+            <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
+              Live sync is disconnected. This build does not guarantee offline
+              persistence, so edits made now may not survive a reload until sync
+              reconnects.
+            </div>
+          )}
 
           {/* Editor area */}
           <div className="relative flex-1 overflow-y-auto">
@@ -427,28 +567,98 @@ export function Editor() {
                   documentRole={documentRole}
                   aiEnabled={aiEnabled}
                   ydoc={ydoc}
-                  onAiProposalChange={(proposal) => setAiProposal(proposal)}
+                  retryRequest={aiRetryRequest}
+                  onHistoryChange={() =>
+                    setAiHistoryRefreshKey((current) => current + 1)
+                  }
+                  onAiNoticeChange={setAiNotice}
+                  onAiProposalChange={(proposal) => {
+                    if (proposal) {
+                      setAiNotice(null);
+                    }
+                    setAiProposal(proposal);
+                  }}
                 />
               )}
             </div>
 
-            {/* AI Proposal panel */}
-            {aiProposal && (
-              <div className="sticky bottom-0 mx-auto max-w-3xl px-6 pb-4">
-                <AiProposal
-                  taskId={aiProposal.taskId}
-                  taskType={aiProposal.taskType}
-                  original={aiProposal.originalText}
-                  originalHtml={aiProposal.originalHtml}
-                  proposed={aiProposal.proposedText}
-                  proposedHtml={aiProposal.proposedHtml}
-                  readOnly={aiProposal.readOnly}
-                  streaming={aiProposal.streaming}
-                  stale={aiProposal.stale}
-                  onAccept={handleAcceptProposal}
-                  onReject={handleRejectProposal}
-                  onDismiss={() => setAiProposal(null)}
-                />
+            {(undoAiChangeVisible || aiNotice || aiProposal) && (
+              <div className="sticky bottom-0 space-y-3 px-6 pb-4">
+                {undoAiChangeVisible && (
+                  <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 shadow-sm">
+                    <div>
+                      <p className="font-medium">AI suggestion applied</p>
+                      <p className="text-xs text-emerald-700">
+                        Undo is available until you continue editing.
+                      </p>
+                    </div>
+                    <button
+                      onClick={handleUndoAiChange}
+                      className="flex items-center gap-1.5 rounded-lg border border-emerald-300 px-3 py-1.5 text-xs font-semibold text-emerald-800 hover:bg-white transition-default"
+                    >
+                      <Undo2 className="h-3.5 w-3.5" />
+                      Undo
+                    </button>
+                  </div>
+                )}
+
+                {aiNotice && (
+                  <div
+                    className={`mx-auto flex max-w-3xl items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm shadow-sm ${
+                      aiNotice.kind === 'cancelled'
+                        ? 'border-amber-200 bg-amber-50 text-amber-900'
+                        : 'border-red-200 bg-red-50 text-red-900'
+                    }`}
+                  >
+                    <div>
+                      <p className="font-medium">{aiNotice.title}</p>
+                      <p
+                        className={`text-xs ${
+                          aiNotice.kind === 'cancelled'
+                            ? 'text-amber-800'
+                            : 'text-red-700'
+                        }`}
+                      >
+                        {aiNotice.message}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {aiNotice.retry && (
+                        <button
+                          onClick={handleRetryAiNotice}
+                          className="rounded-lg border border-current/20 px-3 py-1.5 text-xs font-semibold hover:bg-white/70 transition-default"
+                        >
+                          Retry
+                        </button>
+                      )}
+                      <button
+                        onClick={() => setAiNotice(null)}
+                        className="rounded-lg border border-current/20 px-3 py-1.5 text-xs font-semibold hover:bg-white/70 transition-default"
+                      >
+                        Dismiss
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {aiProposal && (
+                  <div className="mx-auto max-w-3xl">
+                    <AiProposal
+                      taskId={aiProposal.taskId}
+                      taskType={aiProposal.taskType}
+                      original={aiProposal.originalText}
+                      originalHtml={aiProposal.originalHtml}
+                      proposed={aiProposal.proposedText}
+                      proposedHtml={aiProposal.proposedHtml}
+                      readOnly={aiProposal.readOnly}
+                      streaming={aiProposal.streaming}
+                      stale={aiProposal.stale}
+                      onAccept={handleAcceptProposal}
+                      onReject={handleRejectProposal}
+                      onDismiss={() => setAiProposal(null)}
+                    />
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -456,11 +666,22 @@ export function Editor() {
 
         {/* Version history sidebar */}
         {documentId && (
-          <VersionHistory
-            documentId={documentId}
-            isOpen={historyOpen}
-            onClose={() => setHistoryOpen(false)}
-          />
+          <>
+            <VersionHistory
+              documentId={documentId}
+              isOpen={activeSidebar === 'versions'}
+              onClose={() => setActiveSidebar(null)}
+              canRestore={canEditDocument}
+              restoreAvailable={false}
+              restoreReason="Version restore is still backend-placeholder behavior, so it is intentionally disabled in this demo branch."
+            />
+            <AiHistoryPanel
+              documentId={documentId}
+              isOpen={activeSidebar === 'ai'}
+              onClose={() => setActiveSidebar(null)}
+              refreshKey={aiHistoryRefreshKey}
+            />
+          </>
         )}
       </div>
 
@@ -474,4 +695,64 @@ export function Editor() {
       )}
     </div>
   );
+}
+
+function getRoleBadgeClass(role: DocumentRole): string {
+  switch (role) {
+    case 'owner':
+      return 'bg-amber-50 text-amber-700';
+    case 'editor':
+      return 'bg-blue-50 text-blue-700';
+    case 'commenter':
+      return 'bg-emerald-50 text-emerald-700';
+    case 'viewer':
+      return 'bg-slate-100 text-slate-600';
+  }
+}
+
+function getSyncStatus(input: {
+  canEditDocument: boolean;
+  savingTitle: boolean;
+  hasUnsyncedChanges: boolean;
+  syncConnectionStatus: 'connecting' | 'connected' | 'disconnected';
+}): { label: string; toneClass: string } {
+  if (!input.canEditDocument) {
+    return {
+      label: 'Read-only',
+      toneClass: 'text-slate-600',
+    };
+  }
+
+  if (input.savingTitle) {
+    return {
+      label: 'Saving title…',
+      toneClass: 'text-accent',
+    };
+  }
+
+  if (input.syncConnectionStatus === 'disconnected') {
+    return {
+      label: 'Sync disconnected',
+      toneClass: 'text-amber-700',
+    };
+  }
+
+  if (input.syncConnectionStatus === 'connecting') {
+    return {
+      label: 'Connecting sync…',
+      toneClass: 'text-accent',
+    };
+  }
+
+  if (input.hasUnsyncedChanges) {
+    return {
+      label: 'Syncing edits…',
+      toneClass: 'text-accent',
+    };
+  }
+
+  return {
+    label: 'All edits synced',
+    toneClass: 'text-emerald-700',
+  };
 }

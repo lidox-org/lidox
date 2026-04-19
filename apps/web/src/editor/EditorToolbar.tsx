@@ -24,6 +24,8 @@ import { useCallback, useState } from 'react';
 
 interface Props {
   editor: Editor | null;
+  disabled?: boolean;
+  disabledReason?: string;
 }
 
 interface ToolbarButtonProps {
@@ -61,7 +63,11 @@ function Divider() {
   return <div className="mx-1 h-6 w-px bg-border" />;
 }
 
-export function EditorToolbar({ editor }: Props) {
+export function EditorToolbar({
+  editor,
+  disabled = false,
+  disabledReason = 'Read-only access. Formatting controls are unavailable.',
+}: Props) {
   const [linkUrl, setLinkUrl] = useState('');
   const [showLinkInput, setShowLinkInput] = useState(false);
 
@@ -92,6 +98,14 @@ export function EditorToolbar({ editor }: Props) {
   }, [editor, showLinkInput, linkUrl]);
 
   if (!editor) return null;
+
+  if (disabled) {
+    return (
+      <div className="rounded-xl border border-dashed border-border bg-surface px-3 py-2 text-sm text-muted">
+        {disabledReason}
+      </div>
+    );
+  }
 
   const iconSize = 'h-4 w-4';
 
