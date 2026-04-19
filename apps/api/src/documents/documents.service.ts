@@ -2,15 +2,18 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import { eq, and, isNull, desc } from 'drizzle-orm';
 import { db } from '../config/database';
+import { redis } from '../config/redis';
 import { documents, permissions, documentVersions } from '../db/schema';
 import { ROLE_HIERARCHY } from '@lidox/types';
 import type { CreateDocumentInput, UpdateDocumentInput } from '@lidox/types';
 
 @Injectable()
 export class DocumentsService {
+  private readonly logger = new Logger(DocumentsService.name);
   /* ---------------------------------------------------------------- */
   /*  Create                                                           */
   /* ---------------------------------------------------------------- */
@@ -167,7 +170,37 @@ export class DocumentsService {
       throw new NotFoundException('Version not found');
     }
 
-    return { message: 'Version restored', versionId: version.id };
+    if (!version.snapshot) {
+      throw new NotFoundException('Version snapshot is empty — cannot restore');
+    }
+
+    // Insert the snapshot as the latest version row so the sync server loads
+    // it on the next document connection (or immediately for live clients).
+    await db.insert(documentVersions).values({
+      documentId: docId,
+      snapshot: version.snapshot,
+      crdtClock: version.crdtClock,
+      createdBy: userId,
+    });
+
+    // Signal the sync server via Redis Pub/Sub to apply the snapshot to any
+    // currently connected clients immediately.
+    try {
+      await redis.publish(
+        'doc:restore',
+        JSON.stringify({ documentId: docId, snapshot: version.snapshot }),
+      );
+      this.logger.log(`Version restore broadcast sent for doc ${docId}`);
+    } catch (err) {
+      // Redis unavailable — snapshot is in DB, clients will get it on reconnect
+      this.logger.warn(`Redis publish failed for restore (doc ${docId}): ${(err as Error).message}`);
+    }
+
+    return {
+      message: 'Version restored and broadcast to connected clients',
+      versionId: version.id,
+      restoredAt: new Date().toISOString(),
+    };
   }
 
   /* ---------------------------------------------------------------- */

@@ -672,8 +672,11 @@ export function Editor() {
               isOpen={activeSidebar === 'versions'}
               onClose={() => setActiveSidebar(null)}
               canRestore={canEditDocument}
-              restoreAvailable={false}
-              restoreReason="Version restore is still backend-placeholder behavior, so it is intentionally disabled in this demo branch."
+              restoreAvailable={true}
+              onRestore={() => {
+                // After restore, close the sidebar — the sync server broadcasts the new state
+                setActiveSidebar(null);
+              }}
             />
             <AiHistoryPanel
               documentId={documentId}
