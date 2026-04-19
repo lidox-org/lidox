@@ -42,7 +42,6 @@ import { encodeStateVector, serializeRange } from '../editor/aiSelection';
 import { PresenceCursors } from '../editor/PresenceCursors';
 import { ShareDialog } from '../editor/ShareDialog';
 import { VersionHistory } from '../editor/VersionHistory';
-import type { DocumentRole } from '@lidox/types';
 
 const CURSOR_COLORS = [
   '#EF4444',
@@ -259,9 +258,8 @@ export function Editor() {
           class: 'focus:outline-none',
         },
       },
-      editable: role === 'owner' || role === 'editor',
     },
-    [role, ydoc],
+    [canEditDocument, provider, user?.name, ydoc],
   );
 
   useEffect(() => {
