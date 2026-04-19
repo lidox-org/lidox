@@ -7,10 +7,16 @@ export function createQueuedTaskResult(taskId: string): AiTaskResult {
   };
 }
 
-export function createProcessingTaskResult(taskId: string): AiTaskResult {
+export function createProcessingTaskResult(input: {
+  taskId: string;
+  result?: string;
+  modelUsed?: string;
+}): AiTaskResult {
   return {
-    taskId,
+    taskId: input.taskId,
     status: 'processing',
+    result: input.result,
+    modelUsed: input.modelUsed,
   };
 }
 

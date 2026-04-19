@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  AiCancelResponseSchema,
   AiInvokeSchema,
+  AiTaskMetadataSchema,
   AiTaskEventSchema,
   AiInteractionStatus,
   AiTaskStatus,
@@ -86,4 +88,30 @@ test('AI task event schema supports the planned streaming event model', () => {
     taskId: '33333333-3333-4333-8333-333333333333',
     chunk: 'hello',
   });
+});
+
+test('AI cancel response schema supports cancelling and cancelled outcomes', () => {
+  const cancelling = AiCancelResponseSchema.parse({
+    taskId: '33333333-3333-4333-8333-333333333333',
+    status: 'cancelling',
+  });
+  const cancelled = AiCancelResponseSchema.parse({
+    taskId: '33333333-3333-4333-8333-333333333333',
+    status: 'cancelled',
+  });
+
+  assert.equal(cancelling.status, 'cancelling');
+  assert.equal(cancelled.status, 'cancelled');
+});
+
+test('AI task metadata schema binds a task to its document and owner', () => {
+  const parsed = AiTaskMetadataSchema.parse({
+    taskId: '33333333-3333-4333-8333-333333333333',
+    documentId: '22222222-2222-4222-8222-222222222222',
+    userId: '11111111-1111-1111-1111-111111111111',
+    taskType: 'rewrite',
+  });
+
+  assert.equal(parsed.taskType, 'rewrite');
+  assert.equal(parsed.documentId, '22222222-2222-4222-8222-222222222222');
 });

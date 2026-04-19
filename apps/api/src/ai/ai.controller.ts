@@ -7,6 +7,7 @@ import {
   UseGuards,
   Req,
   BadRequestException,
+  Sse,
 } from '@nestjs/common';
 import { Request } from 'express';
 import { AiService } from './ai.service';
@@ -45,6 +46,54 @@ export class AiController {
 
     const user = req.user as AuthenticatedUser;
     return this.aiService.invoke(idParsed.data, bodyParsed.data, user.userId);
+  }
+
+  @Sse('tasks/:taskId/stream')
+  async streamTask(
+    @Param('docId') docId: string,
+    @Param('taskId') taskId: string,
+    @Req() req: Request,
+  ) {
+    const docIdParsed = UUIDSchema.safeParse(docId);
+    if (!docIdParsed.success) {
+      throw new BadRequestException('Invalid document ID');
+    }
+
+    const taskIdParsed = UUIDSchema.safeParse(taskId);
+    if (!taskIdParsed.success) {
+      throw new BadRequestException('Invalid task ID');
+    }
+
+    const user = req.user as AuthenticatedUser;
+    return this.aiService.streamTask(
+      docIdParsed.data,
+      taskIdParsed.data,
+      user.userId,
+    );
+  }
+
+  @Post('tasks/:taskId/cancel')
+  async cancelTask(
+    @Param('docId') docId: string,
+    @Param('taskId') taskId: string,
+    @Req() req: Request,
+  ) {
+    const docIdParsed = UUIDSchema.safeParse(docId);
+    if (!docIdParsed.success) {
+      throw new BadRequestException('Invalid document ID');
+    }
+
+    const taskIdParsed = UUIDSchema.safeParse(taskId);
+    if (!taskIdParsed.success) {
+      throw new BadRequestException('Invalid task ID');
+    }
+
+    const user = req.user as AuthenticatedUser;
+    return this.aiService.cancelTask(
+      docIdParsed.data,
+      taskIdParsed.data,
+      user.userId,
+    );
   }
 
   /* ---------------------------------------------------------------- */

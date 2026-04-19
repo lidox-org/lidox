@@ -4,12 +4,19 @@ import { redis } from '../config/redis';
 import { db } from '../config/database';
 import { aiInteractions } from '../db/schema';
 import type { AiTaskType } from '@lidox/types';
+import {
+  isAiTaskCancellationRequested,
+  clearAiTaskCancellationRequest,
+  storeAiTaskStatus,
+} from './task-store';
 import { createDefaultAiProvider } from './provider-adapter';
+import { publishAiTaskEvent } from './ai-event-bus';
 import {
   buildFailedInteractionLog,
   buildPendingInteractionLog,
 } from './interaction-log';
 import {
+  createCancelledTaskResult,
   createCompletedTaskResult,
   createFailedTaskResult,
   createProcessingTaskResult,
@@ -40,40 +47,83 @@ export function startAiWorker(): Worker {
       logger.log(`Processing AI task ${taskId} (${taskType})`);
 
       // Update status to processing
-      await redis.set(
-        `ai:task:${taskId}`,
-        JSON.stringify(createProcessingTaskResult(taskId)),
-        'EX',
-        3600,
-      );
+      await storeAiTaskStatus(createProcessingTaskResult({ taskId }));
 
       try {
-        const { result, inputTokens, outputTokens, model } =
-          await provider.generate({
-            taskType,
-            selection,
-            language,
+        const stream = await provider.stream({
+          taskType,
+          selection,
+          language,
+        });
+
+        let result = '';
+        let outputTokens = 0;
+
+        await publishAiTaskEvent({
+          type: 'started',
+          taskId,
+          modelUsed: stream.model,
+        });
+        await storeAiTaskStatus(
+          createProcessingTaskResult({
+            taskId,
+            result,
+            modelUsed: stream.model,
+          }),
+        );
+
+        for await (const chunk of stream.chunks) {
+          if (await isAiTaskCancellationRequested(taskId)) {
+            await handleCancelledTask(taskId);
+            return;
+          }
+
+          result += chunk;
+          outputTokens = Math.ceil(result.length / 4);
+
+          await publishAiTaskEvent({
+            type: 'chunk',
+            taskId,
+            chunk,
           });
+          await storeAiTaskStatus(
+            createProcessingTaskResult({
+              taskId,
+              result,
+              modelUsed: stream.model,
+            }),
+          );
+        }
+
+        if (await isAiTaskCancellationRequested(taskId)) {
+          await handleCancelledTask(taskId);
+          return;
+        }
 
         // Groq pricing approximation: ~$0.05-0.27 per million tokens
         // Use $0.10/M tokens as a conservative estimate for cost tracking
-        const costCents = Math.ceil(((inputTokens + outputTokens) / 1_000_000) * 10);
+        const costCents = Math.ceil(
+          ((stream.inputTokens + outputTokens) / 1_000_000) * 10,
+        );
+        const completedTask = createCompletedTaskResult({
+          taskId,
+          result,
+          inputTokens: stream.inputTokens,
+          outputTokens,
+          modelUsed: stream.model,
+        });
 
         // Store result in Redis
-        await redis.set(
-          `ai:task:${taskId}`,
-          JSON.stringify(
-            createCompletedTaskResult({
-              taskId,
-              result,
-              inputTokens,
-              outputTokens,
-              modelUsed: model,
-            }),
-          ),
-          'EX',
-          3600,
-        );
+        await storeAiTaskStatus(completedTask);
+        await publishAiTaskEvent({
+          type: 'complete',
+          taskId,
+          result,
+          inputTokens: stream.inputTokens,
+          outputTokens,
+          modelUsed: stream.model,
+        });
+        await clearAiTaskCancellationRequest(taskId);
 
         // Log to ai_interactions table
         await db.insert(aiInteractions).values(
@@ -82,29 +132,27 @@ export function startAiWorker(): Worker {
             documentId,
             userId,
             taskType,
-            inputTokens,
+            inputTokens: stream.inputTokens,
             outputTokens,
-            modelUsed: model,
+            modelUsed: stream.model,
             costCents,
             selection,
           }),
         );
 
-        logger.log(`AI task ${taskId} completed (model: ${model}, tokens: ${inputTokens}+${outputTokens})`);
+        logger.log(`AI task ${taskId} completed (model: ${stream.model}, tokens: ${stream.inputTokens}+${outputTokens})`);
       } catch (err) {
         logger.error(`AI task ${taskId} failed`, err);
+        const error =
+          err instanceof Error ? err.message : 'Unknown error';
 
-        await redis.set(
-          `ai:task:${taskId}`,
-          JSON.stringify(
-            createFailedTaskResult(
-              taskId,
-              err instanceof Error ? err.message : 'Unknown error',
-            ),
-          ),
-          'EX',
-          3600,
-        );
+        await storeAiTaskStatus(createFailedTaskResult(taskId, error));
+        await publishAiTaskEvent({
+          type: 'failed',
+          taskId,
+          error,
+        });
+        await clearAiTaskCancellationRequest(taskId);
 
         await db.insert(aiInteractions).values(
           buildFailedInteractionLog({
@@ -132,4 +180,19 @@ export function startAiWorker(): Worker {
   logger.log('AI worker started');
 
   return worker;
+}
+
+async function handleCancelledTask(taskId: string): Promise<void> {
+  const cancelledTask = createCancelledTaskResult(
+    taskId,
+    'Generation cancelled by user',
+  );
+
+  await storeAiTaskStatus(cancelledTask);
+  await publishAiTaskEvent({
+    type: 'cancelled',
+    taskId,
+    reason: 'Generation cancelled by user',
+  });
+  await clearAiTaskCancellationRequest(taskId);
 }
