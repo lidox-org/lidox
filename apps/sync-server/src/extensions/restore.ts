@@ -1,5 +1,5 @@
 import { Extension } from '@hocuspocus/server';
-import type { Server } from '@hocuspocus/server';
+import type { Hocuspocus, onConfigurePayload } from '@hocuspocus/server';
 import Redis from 'ioredis';
 import { Pool } from 'pg';
 import * as Y from 'yjs';
@@ -21,12 +21,12 @@ import { config } from '../config';
 export class RestoreExtension implements Extension {
   private sub: Redis | null = null;
   private pool: Pool | null = null;
-  private server: Server | null = null;
+  private instance: Hocuspocus | null = null;
   private ready = false;
 
   /** Called by Hocuspocus after the server is fully initialised. */
-  async onConfigure(payload: { server: Server }): Promise<void> {
-    this.server = payload.server;
+  async onConfigure({ instance }: onConfigurePayload): Promise<void> {
+    this.instance = instance;
     this.initRedis();
     this.initPool();
   }
@@ -94,10 +94,8 @@ export class RestoreExtension implements Extension {
       console.log(`[restore] restoring document ${documentId}`);
 
       // Apply the snapshot to the live Yjs document if clients are connected.
-      // The Hocuspocus server exposes documents via its internal map.
-      const hocuspocusDocuments = (this.server as any)?.documents as
-        | Map<string, { document: Y.Doc }>
-        | undefined;
+      // Hocuspocus exposes active documents on the instance map.
+      const hocuspocusDocuments = this.instance?.documents;
 
       if (hocuspocusDocuments) {
         const liveDoc = hocuspocusDocuments.get(documentId);
@@ -108,7 +106,7 @@ export class RestoreExtension implements Extension {
           const snapshotDoc = new Y.Doc();
           Y.applyUpdate(snapshotDoc, new Uint8Array(update));
           const replacementUpdate = Y.encodeStateAsUpdate(snapshotDoc);
-          Y.applyUpdate(liveDoc.document, replacementUpdate);
+          Y.applyUpdate(liveDoc, replacementUpdate);
           console.log(
             `[restore] applied snapshot to live doc ${documentId} (${replacementUpdate.length} bytes)`,
           );

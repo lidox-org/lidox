@@ -16,6 +16,10 @@ interface FetchOptions extends RequestInit {
   skipAuth?: boolean;
 }
 
+interface FetchRetryOptions {
+  redirectOnFailure?: boolean;
+}
+
 export async function api<T = unknown>(
   path: string,
   options: FetchOptions = {},
@@ -55,6 +59,29 @@ export async function api<T = unknown>(
   }
 
   return res.json();
+}
+
+export async function fetchWithAuthRetry(
+  path: string,
+  options: FetchOptions = {},
+  retryOptions: FetchRetryOptions = {},
+): Promise<Response> {
+  const { skipAuth, ...init } = options;
+  const url = path.startsWith('http') ? path : `${BASE_URL}${path}`;
+
+  let res = await fetch(url, { ...init, credentials: 'include' });
+
+  if (res.status === 401 && !skipAuth) {
+    const refreshed = await tryRefreshToken();
+    if (refreshed) {
+      res = await fetch(url, { ...init, credentials: 'include' });
+    } else if (retryOptions.redirectOnFailure) {
+      window.location.href = '/login';
+      throw new Error('Session expired');
+    }
+  }
+
+  return res;
 }
 
 export class ApiError extends Error {

@@ -33,6 +33,11 @@ class Settings(BaseSettings):
         default=7,
         alias="REFRESH_TOKEN_EXPIRATION_DAYS",
     )
+    groq_api_key: str = Field(default="", alias="GROQ_API_KEY")
+    groq_default_model: str = Field(
+        default="llama-3.3-70b-versatile",
+        alias="GROQ_DEFAULT_MODEL",
+    )
     access_cookie_name: str = "access_token"
     refresh_cookie_name: str = "refresh_token"
 
