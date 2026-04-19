@@ -10,14 +10,30 @@ Choose one path immediately and document it:
 2. Keep `NestJS` and explicitly record the deviation.
 
 Recommendation: migrate to `FastAPI` if schedule permits. If not, do not hide the deviation.
+Important: a documented `NestJS` deviation avoids a silent mismatch penalty, but it does not satisfy the Assignment 2 backend technology requirement.
 
 ## Priority order
-1. Backend strategy and shared contracts
-2. Reliable graded demo path
-3. AI streaming and cancelation
-4. Version restore + AI history + role enforcement gaps
-5. Tests, run script, docs, deviation report
-6. Demo rehearsal and Q&A prep
+1. Fix evaluator-deducted mismatches between docs and implementation
+2. Backend strategy and shared contracts
+3. Reliable graded demo path
+4. AI streaming and cancelation
+5. Version restore + AI history + role enforcement gaps
+6. Tests, run script, docs, deviation report
+7. Demo rehearsal and Q&A prep
+
+## Evaluator feedback to address first
+- Align the documented auth/communication model with the actual implementation.
+- Either implement offline buffering or remove/mark the claim clearly in docs.
+- Finish the version-restore behavior so the PoC matches the report.
+- Finish the AI-proposal handling behavior so the PoC matches the report.
+- Add automated tests.
+- Document and follow branch/merge conventions in the repo.
+
+## Done criteria for any work item
+- The implementation works in the running app, or the remaining gap is explicitly documented as a deviation/rubric risk.
+- Docs and code say the same thing.
+- The owner leaves evidence: tests run, manual checks, and exact remaining risks.
+- No one reports a task as "done" if it only reworded docs for a still-missing baseline feature.
 
 ## Cross-team rules
 - Keep changes PR-sized.
@@ -38,6 +54,7 @@ Recommendation: migrate to `FastAPI` if schedule permits. If not, do not hide th
 ## Required repo-level deliverables
 - `README.md` with setup, run, tests, architecture summary
 - `DEVIATIONS.md` or equivalent README section
+- documented branch/merge conventions that match actual team practice
 - one-command local startup
 - passing backend/frontend tests that cover the baseline
 - live-demo script kept under 5 minutes

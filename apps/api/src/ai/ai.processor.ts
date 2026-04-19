@@ -5,9 +5,24 @@ import Groq from 'groq-sdk';
 import { redis } from '../config/redis';
 import { db } from '../config/database';
 import { aiInteractions } from '../db/schema';
-import { PROMPT_TEMPLATES } from './prompts';
-import { env } from '../config/env';
 import type { AiTaskType } from '@lidox/types';
+import {
+  isAiTaskCancellationRequested,
+  clearAiTaskCancellationRequest,
+  storeAiTaskStatus,
+} from './task-store';
+import { createDefaultAiProvider } from './provider-adapter';
+import { publishAiTaskEvent } from './ai-event-bus';
+import {
+  buildFailedInteractionLog,
+  buildPendingInteractionLog,
+} from './interaction-log';
+import {
+  createCancelledTaskResult,
+  createCompletedTaskResult,
+  createFailedTaskResult,
+  createProcessingTaskResult,
+} from './task-status';
 
 const logger = new Logger('AiProcessor');
 
@@ -17,171 +32,153 @@ export interface AiJobData {
   userId: string;
   taskType: AiTaskType;
   selection: string;
+  selectionHtml?: string;
   language?: string;
-}
-
-/** Model routing per spec: fast tasks use smaller model, others use standard */
-const MODEL_FOR_TASK: Record<string, string> = {
-  grammar: 'llama-3.1-8b-instant',
-  explain: 'llama-3.1-8b-instant',
-  rewrite: 'llama-3.3-70b-versatile',
-  summarize: 'llama-3.3-70b-versatile',
-  translate: 'llama-3.3-70b-versatile',
-  restructure: 'llama-3.3-70b-versatile',
-  analyze: 'llama-3.3-70b-versatile',
-};
-
-/** Groq client (lazy — only instantiated when key is present) */
-let groqClient: Groq | null = null;
-
-function getGroqClient(): Groq | null {
-  if (!env.GROQ_API_KEY) return null;
-  if (!groqClient) {
-    groqClient = new Groq({ apiKey: env.GROQ_API_KEY });
-  }
-  return groqClient;
-}
-
-/**
- * Call Groq API for a given AI task.
- * Falls back to mock response if GROQ_API_KEY is not configured.
- */
-async function callLlm(
-  taskType: AiTaskType,
-  selection: string,
-  language?: string,
-): Promise<{ result: string; inputTokens: number; outputTokens: number; model: string }> {
-  const prompt = PROMPT_TEMPLATES[taskType];
-  const userMessage = prompt.user(selection, language);
-  const model = MODEL_FOR_TASK[taskType] ?? env.GROQ_DEFAULT_MODEL;
-
-  const groq = getGroqClient();
-
-  if (!groq) {
-    // No API key configured — use mock response with warning
-    logger.warn('GROQ_API_KEY not set — returning mock AI response. Set it in .env to enable real AI.');
-    await new Promise((r) => setTimeout(r, 800));
-    const inputTokens = Math.ceil((prompt.system.length + userMessage.length) / 4);
-    const mockResult = getMockResponse(taskType, selection, language);
-    return { result: mockResult, inputTokens, outputTokens: Math.ceil(mockResult.length / 4), model: 'mock' };
-  }
-
-  const completion = await groq.chat.completions.create({
-    model,
-    messages: [
-      { role: 'system', content: prompt.system },
-      { role: 'user', content: userMessage },
-    ],
-    max_tokens: 2048,
-    temperature: 0.7,
-  });
-
-  const result = completion.choices[0]?.message?.content ?? '';
-  const inputTokens = completion.usage?.prompt_tokens ?? 0;
-  const outputTokens = completion.usage?.completion_tokens ?? 0;
-
-  return { result, inputTokens, outputTokens, model };
-}
-
-function getMockResponse(taskType: AiTaskType, selection: string, language?: string): string {
-  const responses: Record<string, string> = {
-    rewrite: `[Rewritten] ${selection.slice(0, 200)}... (improved for clarity and flow)`,
-    summarize: `Summary:\n- Key point from the text\n- Another important finding\n- Overall conclusion based on the content`,
-    translate: `[Translated to ${language || 'English'}] ${selection.slice(0, 200)}...`,
-    grammar: selection.replace(/\s{2,}/g, ' ').trim() + ' [grammar corrected]',
-    restructure: `## Main Section\n\n${selection.slice(0, 100)}...\n\n## Details\n\nAdditional restructured content.`,
-    analyze: `Analysis:\n- Theme: The text discusses important topics\n- Strength: Well-structured argument\n- Suggestion: Consider adding more supporting evidence`,
-    explain: `In simple terms: ${selection.slice(0, 150)}... This means that the content is explaining a concept in an accessible way.`,
-  };
-  return responses[taskType] ?? `[${taskType}] Processed result`;
+  stateVector?: string;
 }
 
 /**
  * Create and start the BullMQ worker for AI tasks.
  */
 export function startAiWorker(): Worker {
+  const provider = createDefaultAiProvider();
+
   const worker = new Worker<AiJobData>(
     'ai-tasks',
     async (job: Job<AiJobData>) => {
-      const { taskId, documentId, userId, taskType, selection, language } = job.data;
+      const {
+        taskId,
+        documentId,
+        userId,
+        taskType,
+        selection,
+        selectionHtml,
+        language,
+        stateVector,
+      } = job.data;
 
       logger.log(`Processing AI task ${taskId} (${taskType})`);
 
       // Update status to processing
-      await redis.set(
-        `ai:task:${taskId}`,
-        JSON.stringify({ taskId, status: 'processing' }),
-        'EX',
-        3600,
-      );
+      await storeAiTaskStatus(createProcessingTaskResult({ taskId }));
 
       try {
-        const { result, inputTokens, outputTokens, model } = await callLlm(
+        const stream = await provider.stream({
           taskType,
           selection,
+          selectionHtml,
           language,
+        });
+
+        let result = '';
+        let outputTokens = 0;
+
+        await publishAiTaskEvent({
+          type: 'started',
+          taskId,
+          modelUsed: stream.model,
+        });
+        await storeAiTaskStatus(
+          createProcessingTaskResult({
+            taskId,
+            result,
+            modelUsed: stream.model,
+          }),
         );
+
+        for await (const chunk of stream.chunks) {
+          if (await isAiTaskCancellationRequested(taskId)) {
+            await handleCancelledTask(taskId);
+            return;
+          }
+
+          result += chunk;
+          outputTokens = Math.ceil(result.length / 4);
+
+          await publishAiTaskEvent({
+            type: 'chunk',
+            taskId,
+            chunk,
+          });
+          await storeAiTaskStatus(
+            createProcessingTaskResult({
+              taskId,
+              result,
+              modelUsed: stream.model,
+            }),
+          );
+        }
+
+        if (await isAiTaskCancellationRequested(taskId)) {
+          await handleCancelledTask(taskId);
+          return;
+        }
 
         // Groq pricing approximation: ~$0.05-0.27 per million tokens
         // Use $0.10/M tokens as a conservative estimate for cost tracking
-        const costCents = Math.ceil(((inputTokens + outputTokens) / 1_000_000) * 10);
+        const costCents = Math.ceil(
+          ((stream.inputTokens + outputTokens) / 1_000_000) * 10,
+        );
+        const completedTask = createCompletedTaskResult({
+          taskId,
+          result,
+          inputTokens: stream.inputTokens,
+          outputTokens,
+          modelUsed: stream.model,
+        });
 
         // Store result in Redis
-        await redis.set(
-          `ai:task:${taskId}`,
-          JSON.stringify({
-            taskId,
-            status: 'completed',
-            result,
-            inputTokens,
-            outputTokens,
-            modelUsed: model,
-          }),
-          'EX',
-          3600,
-        );
+        await storeAiTaskStatus(completedTask);
+        await publishAiTaskEvent({
+          type: 'complete',
+          taskId,
+          result,
+          inputTokens: stream.inputTokens,
+          outputTokens,
+          modelUsed: stream.model,
+        });
+        await clearAiTaskCancellationRequest(taskId);
 
         // Log to ai_interactions table
-        await db.insert(aiInteractions).values({
-          id: taskId,
-          documentId,
-          userId,
-          taskType,
-          inputTokens,
-          outputTokens,
-          modelUsed: model,
-          costCents,
-          status: 'accepted',
-          sourceTextHash: sha256(selection),
-        });
-
-        logger.log(`AI task ${taskId} completed (model: ${model}, tokens: ${inputTokens}+${outputTokens})`);
-      } catch (err) {
-        logger.error(`AI task ${taskId} failed`, err);
-
-        await redis.set(
-          `ai:task:${taskId}`,
-          JSON.stringify({
+        await db.insert(aiInteractions).values(
+          buildPendingInteractionLog({
             taskId,
-            status: 'failed',
-            error: err instanceof Error ? err.message : 'Unknown error',
+            documentId,
+            userId,
+            taskType,
+            inputTokens: stream.inputTokens,
+            outputTokens,
+            modelUsed: stream.model,
+            costCents,
+            selection,
+            proposalText: result,
+            sourceStateVector: stateVector,
           }),
-          'EX',
-          3600,
         );
 
-        await db.insert(aiInteractions).values({
-          id: taskId,
-          documentId,
-          userId,
-          taskType,
-          inputTokens: 0,
-          outputTokens: 0,
-          modelUsed: 'unknown',
-          costCents: 0,
-          status: 'rejected',
-          sourceTextHash: sha256(selection),
+        logger.log(`AI task ${taskId} completed (model: ${stream.model}, tokens: ${stream.inputTokens}+${outputTokens})`);
+      } catch (err) {
+        logger.error(`AI task ${taskId} failed`, err);
+        const error =
+          err instanceof Error ? err.message : 'Unknown error';
+
+        await storeAiTaskStatus(createFailedTaskResult(taskId, error));
+        await publishAiTaskEvent({
+          type: 'failed',
+          taskId,
+          error,
         });
+        await clearAiTaskCancellationRequest(taskId);
+
+        await db.insert(aiInteractions).values(
+          buildFailedInteractionLog({
+            taskId,
+            documentId,
+            userId,
+            taskType,
+            selection,
+          }),
+        );
 
         throw err;
       }
@@ -201,7 +198,17 @@ export function startAiWorker(): Worker {
   return worker;
 }
 
-/** SHA-256 hash for source text deduplication / staleness detection */
-function sha256(text: string): string {
-  return crypto.createHash('sha256').update(text).digest('hex');
+async function handleCancelledTask(taskId: string): Promise<void> {
+  const cancelledTask = createCancelledTaskResult(
+    taskId,
+    'Generation cancelled by user',
+  );
+
+  await storeAiTaskStatus(cancelledTask);
+  await publishAiTaskEvent({
+    type: 'cancelled',
+    taskId,
+    reason: 'Generation cancelled by user',
+  });
+  await clearAiTaskCancellationRequest(taskId);
 }

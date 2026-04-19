@@ -118,7 +118,15 @@ export const aiInteractions = pgTable('ai_interactions', {
   costCents: integer('cost_cents').notNull(),
   status: varchar('status', { length: 20 }).notNull(),
   sourceTextHash: varchar('source_text_hash', { length: 128 }),
+  sourceText: text('source_text'),
+  proposalText: text('proposal_text'),
+  sourceStateVector: text('source_state_vector'),
+  appliedText: text('applied_text'),
+  staleAtReview: boolean('stale_at_review').notNull().default(false),
   createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
     .notNull()
     .defaultNow(),
 });

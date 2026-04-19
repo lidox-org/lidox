@@ -12,6 +12,9 @@
 - Version restore is not fully implemented.
 - AI history logging/UI is incomplete.
 - Some permission and collaboration edge cases are not yet robustly enforced.
+- Evaluators already flagged auth/communication-model mismatch between the report and the code.
+- Evaluators already flagged documented offline buffering that is not implemented.
+- Evaluators already flagged missing branch/merge convention follow-through.
 
 ## What is already strong
 - React frontend exists and is substantial.
@@ -41,6 +44,7 @@ About `10-20%` complete.
 About `50-60%` complete.
 
 ## Critical blockers
+- Docs/code mismatch on auth, communication, and offline claims
 - Backend technology compliance decision
 - Streaming transport and cancelation design
 - End-to-end stabilization before heavy test writing
@@ -48,3 +52,4 @@ About `50-60%` complete.
 ## Agent guidance
 - Treat this as a prioritization file, not a spec.
 - If time becomes tight, optimize for rubric coverage and demo reliability before breadth.
+- When in doubt, prefer making the implementation match the docs, or update the docs immediately and explicitly.
