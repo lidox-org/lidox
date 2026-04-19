@@ -3,7 +3,7 @@ import type {
   AiProposalReviewAction,
   AiProposalReviewInput,
 } from '@lidox/types';
-import * as crypto from 'crypto';
+import * as crypto from 'node:crypto';
 
 interface StalenessInput {
   sourceTextHash: string | null;

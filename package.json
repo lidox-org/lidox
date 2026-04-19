@@ -8,8 +8,8 @@
 	"scripts": {
 		"dev": "turbo run dev",
 		"build": "turbo run build",
-		"lint": "biome check package.json turbo.json biome.json playwright.config.ts apps packages tests",
-		"lint:fix": "biome check --write package.json turbo.json biome.json playwright.config.ts apps packages tests",
+		"lint": "node ./node_modules/@biomejs/biome/bin/biome check package.json turbo.json biome.json playwright.config.ts apps packages tests",
+		"lint:fix": "node ./node_modules/@biomejs/biome/bin/biome check --write package.json turbo.json biome.json playwright.config.ts apps packages tests",
 		"test": "npm run test:unit && npm run test:integration && npm run test:e2e",
 		"test:unit": "npm --workspace @lidox/api run test:unit",
 		"test:integration": "npm --workspace @lidox/api run test:integration",
