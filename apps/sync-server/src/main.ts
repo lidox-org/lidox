@@ -4,6 +4,7 @@ import { AuthExtension } from './extensions/auth';
 import { DatabaseExtension } from './extensions/database';
 import { RedisPresenceExtension } from './extensions/redis';
 import { LoggerExtension } from './extensions/logger';
+import { RestoreExtension } from './extensions/restore';
 
 async function bootstrap(): Promise<void> {
   console.log(`[sync-server] starting on port ${config.SYNC_PORT}...`);
@@ -21,6 +22,7 @@ async function bootstrap(): Promise<void> {
       new AuthExtension(),
       new DatabaseExtension(),
       new RedisPresenceExtension(),
+      new RestoreExtension(),
     ],
   });
 
