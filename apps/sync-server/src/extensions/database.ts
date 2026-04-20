@@ -1,7 +1,174 @@
 import { Extension, onLoadDocumentPayload, onStoreDocumentPayload } from '@hocuspocus/server';
+import { createHash } from 'node:crypto';
 import { Pool } from 'pg';
 import * as Y from 'yjs';
 import { config } from '../config';
+
+const PREVIEW_CHAR_LIMIT = 220;
+const PREVIEW_LINE_LIMIT = 3;
+const BLOCK_TAGS = new Set([
+  'address',
+  'article',
+  'aside',
+  'blockquote',
+  'div',
+  'dl',
+  'figcaption',
+  'figure',
+  'footer',
+  'h1',
+  'h2',
+  'h3',
+  'h4',
+  'h5',
+  'h6',
+  'header',
+  'li',
+  'main',
+  'nav',
+  'ol',
+  'p',
+  'pre',
+  'section',
+  'table',
+  'tbody',
+  'td',
+  'tfoot',
+  'th',
+  'thead',
+  'tr',
+  'ul',
+]);
+
+type PreviewBranchNode = {
+  toArray: () => unknown[];
+  toString: () => string;
+  nodeName?: string;
+};
+
+type PreviewTextNode = {
+  toString: () => string;
+  toArray?: undefined;
+  nodeName?: undefined;
+};
+
+function isPreviewBranchNode(value: unknown): value is PreviewBranchNode {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  return (
+    typeof (value as { toArray?: unknown }).toArray === 'function' &&
+    typeof (value as { toString?: unknown }).toString === 'function'
+  );
+}
+
+function isPreviewTextNode(value: unknown): value is PreviewTextNode {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  return (
+    typeof (value as { toString?: unknown }).toString === 'function' &&
+    typeof (value as { toArray?: unknown }).toArray !== 'function'
+  );
+}
+
+export function buildVersionPreview(doc: Y.Doc): string | null {
+  const segments: string[] = [];
+
+  for (const name of doc.share.keys()) {
+    const fragment = doc.getXmlFragment(name);
+    if (isPreviewBranchNode(fragment)) {
+      appendFragmentPreview(fragment, segments);
+    }
+  }
+
+  const normalizedLines = segments
+    .join('')
+    .replace(/\u00a0/g, ' ')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .split('\n')
+    .map((line) => line.replace(/\s+/g, ' ').trim())
+    .filter(Boolean);
+
+  if (normalizedLines.length === 0) {
+    return null;
+  }
+
+  const previewLines: string[] = [];
+  let remainingChars = PREVIEW_CHAR_LIMIT;
+
+  for (const line of normalizedLines) {
+    if (previewLines.length >= PREVIEW_LINE_LIMIT || remainingChars <= 0) {
+      break;
+    }
+
+    const nextLine =
+      line.length <= remainingChars
+        ? line
+        : `${line.slice(0, Math.max(0, remainingChars - 1)).trimEnd()}…`;
+
+    if (!nextLine) {
+      break;
+    }
+
+    previewLines.push(nextLine);
+    remainingChars -= nextLine.length;
+  }
+
+  return previewLines.join('\n');
+}
+
+function appendFragmentPreview(fragment: PreviewBranchNode, segments: string[]): void {
+  for (const node of fragment.toArray()) {
+    appendNodePreview(node, segments);
+  }
+}
+
+function appendNodePreview(node: unknown, segments: string[]): void {
+  if (isPreviewTextNode(node)) {
+    segments.push(node.toString());
+    return;
+  }
+
+  if (!isPreviewBranchNode(node) || typeof node.nodeName !== 'string') {
+    return;
+  }
+
+  const tagName = node.nodeName.toLowerCase();
+
+  if (tagName === 'br') {
+    segments.push('\n');
+    return;
+  }
+
+  if (tagName === 'li') {
+    segments.push('• ');
+  }
+
+  if (BLOCK_TAGS.has(tagName) && needsLineBreak(segments)) {
+    segments.push('\n');
+  }
+
+  for (const child of node.toArray()) {
+    appendNodePreview(child, segments);
+  }
+
+  if (BLOCK_TAGS.has(tagName)) {
+    segments.push('\n');
+  }
+}
+
+function needsLineBreak(segments: string[]): boolean {
+  const last = segments[segments.length - 1] ?? '';
+  return last.length > 0 && !last.endsWith('\n');
+}
+
+function buildSnapshotHash(state: Uint8Array): string {
+  return createHash('sha256').update(Buffer.from(state)).digest('hex');
+}
 
 /**
  * PostgreSQL persistence extension.
@@ -105,6 +272,10 @@ export class DatabaseExtension implements Extension {
     try {
       const state = Y.encodeStateAsUpdate(data.document);
       const base64 = Buffer.from(state).toString('base64');
+      const snapshotHash = buildSnapshotHash(state);
+      const snapshotDoc = new Y.Doc();
+      Y.applyUpdate(snapshotDoc, state);
+      const previewText = buildVersionPreview(snapshotDoc);
 
       // Look up the owner/creator for this document to satisfy NOT NULL constraint
       const ownerResult = await this.pool.query<{ owner_id: string }>(
@@ -119,13 +290,46 @@ export class DatabaseExtension implements Extension {
 
       const ownerId = ownerResult.rows[0].owner_id;
 
-      // Approximate CRDT clock from state size (monotonically increasing proxy)
+      const latestVersionResult = await this.pool.query<{
+        snapshot: string | null;
+        snapshot_hash: string | null;
+      }>(
+        `SELECT snapshot, snapshot_hash
+         FROM document_versions
+         WHERE document_id = $1
+         ORDER BY created_at DESC, id DESC
+         LIMIT 1`,
+        [data.documentName],
+      );
+
+      const latestVersion = latestVersionResult.rows[0];
+      if (
+        latestVersion &&
+        (latestVersion.snapshot_hash === snapshotHash ||
+          latestVersion.snapshot === base64)
+      ) {
+        console.log(
+          `[database] skipped duplicate snapshot for doc="${data.documentName}"`,
+        );
+        return;
+      }
+
+      // Retained only for schema compatibility. User-facing numbering is computed
+      // by the API from snapshot order instead of the Yjs update byte length.
       const crdtClock = Math.floor(state.length);
 
       await this.pool.query(
-        `INSERT INTO document_versions (document_id, snapshot, crdt_clock, created_by, created_at)
-         VALUES ($1, $2, $3, $4, NOW())`,
-        [data.documentName, base64, crdtClock, ownerId],
+        `INSERT INTO document_versions (
+           document_id,
+           snapshot,
+           crdt_clock,
+           preview_text,
+           snapshot_hash,
+           created_by,
+           created_at
+         )
+         VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+        [data.documentName, base64, crdtClock, previewText, snapshotHash, ownerId],
       );
 
       console.log(`[database] stored snapshot for doc="${data.documentName}" (${state.length} bytes)`);

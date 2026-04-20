@@ -32,6 +32,7 @@ def to_camel_row(row: dict) -> dict:
         "crdt_clock": "crdtClock",
         "created_by": "createdBy",
         "snapshot_url": "snapshotUrl",
+        "preview_text": "previewText",
         "user_id": "userId",
         "link_token": "linkToken",
         "avatar_url": "avatarUrl",
@@ -362,10 +363,45 @@ class DocumentsService:
             raise api_error(status.HTTP_403_FORBIDDEN, "No access to this document")
         rows = await fetch_all(
             """
-            SELECT id, document_id, NULL::TEXT AS snapshot_url, crdt_clock, created_by, created_at
-            FROM document_versions
-            WHERE document_id = %s
-            ORDER BY created_at DESC
+            WITH ordered_versions AS (
+                SELECT
+                    v.id,
+                    v.document_id,
+                    v.snapshot,
+                    NULL::TEXT AS snapshot_url,
+                    COALESCE(v.preview_text, '') AS preview_text,
+                    COALESCE(u.name, u.email, v.created_by::TEXT) AS created_by,
+                    v.created_at,
+                    LAG(v.snapshot) OVER (ORDER BY v.created_at ASC, v.id ASC) AS previous_snapshot
+                FROM document_versions v
+                LEFT JOIN users u ON u.id = v.created_by
+                WHERE v.document_id = %s
+            ),
+            visible_versions AS (
+                SELECT
+                    id,
+                    document_id,
+                    snapshot_url,
+                    preview_text,
+                    created_by,
+                    created_at
+                FROM ordered_versions
+                WHERE previous_snapshot IS DISTINCT FROM snapshot
+            ),
+            numbered_versions AS (
+                SELECT
+                    id,
+                    document_id,
+                    snapshot_url,
+                    ROW_NUMBER() OVER (ORDER BY created_at ASC, id ASC) AS crdt_clock,
+                    NULLIF(preview_text, '') AS preview_text,
+                    created_by,
+                    created_at
+                FROM visible_versions
+            )
+            SELECT id, document_id, snapshot_url, crdt_clock, preview_text, created_by, created_at
+            FROM numbered_versions
+            ORDER BY created_at DESC, id DESC
             LIMIT 50
             """,
             (doc_id,),
@@ -381,7 +417,7 @@ class DocumentsService:
             )
         version = await fetch_one(
             """
-            SELECT id, snapshot, crdt_clock
+            SELECT id, snapshot, crdt_clock, preview_text, snapshot_hash
             FROM document_versions
             WHERE id = %s AND document_id = %s
             LIMIT 1
@@ -398,10 +434,24 @@ class DocumentsService:
 
         await execute(
             """
-            INSERT INTO document_versions (document_id, snapshot, crdt_clock, created_by)
-            VALUES (%s, %s, %s, %s)
+            INSERT INTO document_versions (
+                document_id,
+                snapshot,
+                crdt_clock,
+                created_by,
+                preview_text,
+                snapshot_hash
+            )
+            VALUES (%s, %s, %s, %s, %s, %s)
             """,
-            (doc_id, version["snapshot"], version["crdt_clock"], user_id),
+            (
+                doc_id,
+                version["snapshot"],
+                version["crdt_clock"],
+                user_id,
+                version.get("preview_text"),
+                version.get("snapshot_hash"),
+            ),
         )
         try:
             await get_redis().publish(

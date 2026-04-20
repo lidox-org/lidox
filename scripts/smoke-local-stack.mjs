@@ -198,6 +198,11 @@ async function main() {
     const versions = await apiRequest(`/api/documents/${documentId}/versions`, {
       cookieJar: owner.cookieJar,
     });
+    assert.equal(versions.payload.length, 2);
+    assert.equal(versions.payload[0].crdtClock, 2);
+    assert.equal(versions.payload[1].crdtClock, 1);
+    assert.match(versions.payload[0].previewText ?? '', /Version two/);
+    assert.match(versions.payload[1].previewText ?? '', /Version one/);
     const oldestVersion = versions.payload.at(-1);
     assert.ok(oldestVersion, 'expected at least one stored version');
 

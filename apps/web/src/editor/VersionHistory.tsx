@@ -6,6 +6,7 @@ interface Version {
   id: string;
   documentId: string;
   crdtClock: number;
+  previewText?: string | null;
   createdBy: string;
   createdAt: string;
   snapshotUrl: string | null;
@@ -229,6 +230,12 @@ export function VersionHistory({
                     <p className="mt-1 text-[11px] text-muted">
                       {getRelativeTime(version.createdAt)}
                     </p>
+
+                    {version.previewText && (
+                      <p className="mt-1.5 whitespace-pre-line text-[11px] leading-4 text-slate-500">
+                        {version.previewText}
+                      </p>
+                    )}
 
                     <div className="mt-1.5 flex items-center gap-1 text-[11px] text-gray-400">
                       <User className="h-3 w-3" />
