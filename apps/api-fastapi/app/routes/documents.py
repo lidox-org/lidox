@@ -8,7 +8,7 @@ from app.http import (
     RestoreResponse,
     VersionOut,
 )
-from app.models import CreateDocumentInput, ShareDocumentInput, UpdateDocumentInput
+from app.models import CreateDocumentInput, ExportPdfInput, ShareDocumentInput, UpdateDocumentInput
 from app.security import AuthContext, parse_uuid
 from app.services import DocumentsService, PermissionsService
 
@@ -94,6 +94,30 @@ async def share_document(
         body.email,
         body.role,
         current_user.user_id,
+    )
+
+
+@router.post(
+    "/{doc_id}/export/pdf",
+    summary="Export a document as PDF",
+)
+async def export_document_pdf(
+    doc_id: str,
+    body: ExportPdfInput,
+    current_user: AuthContext = CurrentUser,
+):
+    filename, pdf_bytes = await documents_service.export_pdf(
+        parse_uuid(doc_id, "document ID"),
+        current_user.user_id,
+        body.title,
+        body.text,
+    )
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+        },
     )
 
 

@@ -94,4 +94,28 @@ describe('Login', () => {
     ).toBeInTheDocument();
     expect(mocks.navigate).not.toHaveBeenCalled();
   });
+
+  it('renders the Google sign-in entry point', () => {
+    render(
+      <MemoryRouter>
+        <Login />
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.getByRole('link', { name: /continue with google/i }),
+    ).toHaveAttribute('href', '/api/auth/google/start');
+  });
+
+  it('shows OAuth setup guidance when Google auth is not configured', async () => {
+    render(
+      <MemoryRouter initialEntries={['/login?oauth_error=google_not_configured']}>
+        <Login />
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByText(/google sign-in is not configured yet/i),
+    ).toBeInTheDocument();
+  });
 });

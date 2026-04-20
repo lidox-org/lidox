@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import type { DocumentRole } from '@lidox/types';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
@@ -11,6 +11,7 @@ import {
   Loader2,
   Search,
   Clock,
+  X,
 } from 'lucide-react';
 
 interface DocumentItem {
@@ -24,6 +25,7 @@ interface DocumentItem {
 
 export function Dashboard() {
   const navigate = useNavigate();
+  const location = useLocation();
   const user = useAuth((s) => s.user);
 
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
@@ -31,6 +33,9 @@ export function Dashboard() {
   const [creating, setCreating] = useState(false);
   const [search, setSearch] = useState('');
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
+  const [noticeDismissed, setNoticeDismissed] = useState(false);
+  const notice =
+    ((location.state as { notice?: string } | null)?.notice ?? null);
 
   const fetchDocuments = useCallback(async () => {
     try {
@@ -46,6 +51,10 @@ export function Dashboard() {
   useEffect(() => {
     fetchDocuments();
   }, [fetchDocuments]);
+
+  useEffect(() => {
+    setNoticeDismissed(false);
+  }, [notice]);
 
   const handleCreate = async () => {
     setCreating(true);
@@ -103,6 +112,19 @@ export function Dashboard() {
 
   return (
     <div className="p-6 lg:p-10">
+      {notice && !noticeDismissed && (
+        <div className="mb-6 flex items-start justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <p>{notice}</p>
+          <button
+            onClick={() => setNoticeDismissed(true)}
+            className="rounded-md p-1 text-amber-700 hover:bg-white/70 transition-default"
+            title="Dismiss notice"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
       {/* Header */}
       <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>

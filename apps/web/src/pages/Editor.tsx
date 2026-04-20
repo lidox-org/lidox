@@ -20,9 +20,10 @@ import {
   Wifi,
   WifiOff,
   Menu,
+  Download,
 } from 'lucide-react';
 
-import { api } from '../lib/api';
+import { api, fetchWithAuthRetry } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import {
   getOrCreateDoc,
@@ -71,6 +72,12 @@ interface AiProposalData {
   stale: boolean;
 }
 
+interface PermissionChangeMessage {
+  type?: string;
+  newRole?: DocumentRole | null;
+  revoked?: boolean;
+}
+
 export function Editor() {
   const { id: documentId } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -97,6 +104,11 @@ export function Editor() {
     'connecting' | 'connected' | 'disconnected'
   >('connecting');
   const [hasUnsyncedChanges, setHasUnsyncedChanges] = useState(false);
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const [pageNotice, setPageNotice] = useState<{
+    tone: 'error' | 'warning';
+    message: string;
+  } | null>(null);
 
   const titleInputRef = useRef<HTMLInputElement>(null);
   const saveTitleTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
@@ -107,6 +119,7 @@ export function Editor() {
   const canEditDocument =
     documentRole === 'owner' || documentRole === 'editor';
   const canManagePermissions = documentRole === 'owner';
+  const canExportDocument = Boolean(documentRole);
   const syncStatus = getSyncStatus({
     canEditDocument,
     savingTitle: saving,
@@ -195,6 +208,7 @@ export function Editor() {
         setDocTitle(doc.title);
         setDocumentRole(doc.role);
         setAiEnabled(doc.aiEnabled);
+        setPageNotice(null);
       } catch {
         navigate('/dashboard');
       } finally {
@@ -213,6 +227,41 @@ export function Editor() {
       }
     };
   }, [documentId]);
+
+  useEffect(() => {
+    if (!provider || !documentId) {
+      return;
+    }
+
+    const handleStatelessMessage = ({ payload }: { payload: string }) => {
+      let message: PermissionChangeMessage;
+
+      try {
+        message = JSON.parse(payload) as PermissionChangeMessage;
+      } catch {
+        return;
+      }
+
+      if (message.type !== 'permission-change') {
+        return;
+      }
+
+      destroyProvider(documentId);
+      navigate('/dashboard', {
+        replace: true,
+        state: {
+          notice: message.revoked
+            ? `Your access to “${docTitle}” was revoked and the live session was closed.`
+            : `Your access to “${docTitle}” changed. Reopen the document from the dashboard to continue with the new permission.`,
+        },
+      });
+    };
+
+    provider.on('stateless', handleStatelessMessage);
+    return () => {
+      provider.off('stateless', handleStatelessMessage);
+    };
+  }, [documentId, docTitle, navigate, provider]);
 
   const editor = useEditor(
     {
@@ -409,6 +458,52 @@ export function Editor() {
     setUndoAiChangeVisible(false);
   };
 
+  const handleExportPdf = useCallback(async () => {
+    if (!documentId || !editor || !canExportDocument) {
+      return;
+    }
+
+    setExportingPdf(true);
+    setPageNotice(null);
+
+    try {
+      const response = await fetchWithAuthRetry(
+        `/documents/${documentId}/export/pdf`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            title: docTitle,
+            text: editor.getText({ blockSeparator: '\n\n' }),
+          }),
+        },
+        { redirectOnFailure: true },
+      );
+
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({ message: 'PDF export failed' }));
+        throw new Error(body.message ?? 'PDF export failed');
+      }
+
+      const blob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = getDownloadFilename(response.headers.get('content-disposition'), docTitle);
+      link.click();
+      window.URL.revokeObjectURL(downloadUrl);
+    } catch (err) {
+      setPageNotice({
+        tone: 'error',
+        message: err instanceof Error ? err.message : 'PDF export failed.',
+      });
+    } finally {
+      setExportingPdf(false);
+    }
+  }, [canExportDocument, docTitle, documentId, editor]);
+
   const handleRetryAiNotice = () => {
     if (!aiNotice?.retry) return;
 
@@ -541,6 +636,22 @@ export function Editor() {
             <Sparkles className="h-4 w-4" />
           </button>
 
+          {canExportDocument && (
+            <button
+              onClick={handleExportPdf}
+              disabled={exportingPdf}
+              className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm font-semibold text-ink hover:bg-surface disabled:opacity-60 transition-default"
+              title="Download a PDF export"
+            >
+              {exportingPdf ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Download className="h-3.5 w-3.5" />
+              )}
+              PDF
+            </button>
+          )}
+
           {canManagePermissions && (
             <button
               onClick={() => setShareOpen(true)}
@@ -577,6 +688,18 @@ export function Editor() {
             <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
               Live sync is disconnected. Local edits are being buffered in this
               browser and will resync when the connection returns.
+            </div>
+          )}
+
+          {pageNotice && (
+            <div
+              className={`border-b px-4 py-2 text-sm ${
+                pageNotice.tone === 'warning'
+                  ? 'border-amber-200 bg-amber-50 text-amber-800'
+                  : 'border-red-200 bg-red-50 text-red-700'
+              }`}
+            >
+              {pageNotice.message}
             </div>
           )}
 
@@ -781,4 +904,20 @@ function getSyncStatus(input: {
     label: 'All edits synced',
     toneClass: 'text-emerald-700',
   };
+}
+
+function getDownloadFilename(
+  contentDisposition: string | null,
+  title: string,
+): string {
+  const match = contentDisposition?.match(/filename="([^"]+)"/i);
+  if (match?.[1]) {
+    return match[1];
+  }
+
+  const fallback = title
+    .trim()
+    .replace(/[^a-z0-9._-]+/gi, '-')
+    .replace(/^-+|-+$/g, '');
+  return `${fallback || 'lidox-document'}.pdf`;
 }

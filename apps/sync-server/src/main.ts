@@ -2,6 +2,7 @@ import { Server } from '@hocuspocus/server';
 import { config } from './config';
 import { AuthExtension } from './extensions/auth';
 import { DatabaseExtension } from './extensions/database';
+import { PermissionDisconnectExtension } from './extensions/permissions';
 import { RedisPresenceExtension } from './extensions/redis';
 import { LoggerExtension } from './extensions/logger';
 import { RestoreExtension } from './extensions/restore';
@@ -20,6 +21,7 @@ async function bootstrap(): Promise<void> {
     extensions: [
       new LoggerExtension(),
       new AuthExtension(),
+      new PermissionDisconnectExtension(),
       new DatabaseExtension(),
       new RedisPresenceExtension(),
       new RestoreExtension(),

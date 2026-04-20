@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     api_port: int = Field(default=3001, alias="API_PORT")
     fastapi_port: int = Field(default=8001, alias="FASTAPI_PORT")
     cors_origin: str = Field(default="http://localhost:5173", alias="CORS_ORIGIN")
+    web_base_url: str = Field(default="http://localhost:5173", alias="WEB_BASE_URL")
 
     database_url: str = Field(
         default="postgresql://lidox:lidox_dev@localhost:5432/lidox",
@@ -44,6 +45,12 @@ class Settings(BaseSettings):
         default="llama-3.3-70b-versatile",
         alias="GROQ_DEFAULT_MODEL",
     )
+    google_client_id: str = Field(default="", alias="GOOGLE_CLIENT_ID")
+    google_client_secret: str = Field(default="", alias="GOOGLE_CLIENT_SECRET")
+    google_oauth_redirect_uri: str = Field(
+        default="",
+        alias="GOOGLE_OAUTH_REDIRECT_URI",
+    )
     access_cookie_name: str = "access_token"
     refresh_cookie_name: str = "refresh_token"
 
@@ -57,6 +64,16 @@ class Settings(BaseSettings):
     @property
     def service_port(self) -> int:
         return self.fastapi_port or self.api_port
+
+    @property
+    def resolved_google_oauth_redirect_uri(self) -> str:
+        if self.google_oauth_redirect_uri:
+            return self.google_oauth_redirect_uri
+        return f"http://localhost:{self.service_port}/api/auth/google/callback"
+
+    @property
+    def google_oauth_enabled(self) -> bool:
+        return bool(self.google_client_id and self.google_client_secret)
 
     @field_validator("refresh_token_expiration_days", mode="before")
     @classmethod

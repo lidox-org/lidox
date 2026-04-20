@@ -103,6 +103,44 @@ def test_refresh_rejects_missing_token():
     assert response.status_code == 401
 
 
+def test_google_start_redirects_back_to_login_when_not_configured(monkeypatch):
+    monkeypatch.setattr("app.routes.auth.AuthService.google_oauth_enabled", lambda self: False)
+
+    response = client.get("/api/auth/google/start", follow_redirects=False)
+
+    assert response.status_code == 302
+    assert response.headers["location"].endswith("/login?oauth_error=google_not_configured")
+
+
+def test_google_callback_sets_session_cookies_and_redirects(monkeypatch):
+    monkeypatch.setattr("app.routes.auth.AuthService.google_oauth_enabled", lambda self: True)
+    monkeypatch.setattr(
+        "app.routes.auth.AuthService.verify_google_oauth_state",
+        lambda self, state_token, nonce: None,
+    )
+
+    async def fake_google_login(self, code):
+        assert code == "google-code"
+        return {
+            "user": {"id": OWNER_ID, "email": "owner@test.com", "name": "Owner", "avatarUrl": None},
+            "accessToken": "access-tok",
+            "refreshToken": "refresh-tok",
+        }
+
+    monkeypatch.setattr("app.routes.auth.AuthService.login_with_google_code", fake_google_login)
+
+    response = client.get(
+        "/api/auth/google/callback?state=signed-state&code=google-code",
+        cookies={"google_oauth_nonce": "nonce-123"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    assert response.headers["location"].endswith("/dashboard")
+    assert "access_token" in response.cookies
+    assert "refresh_token" in response.cookies
+
+
 # ---------------------------------------------------------------------------
 # RBAC: document update — title requires editor, aiEnabled requires owner
 # ---------------------------------------------------------------------------
@@ -218,3 +256,25 @@ def test_editor_restore_returns_snapshot_payload(monkeypatch):
     assert response.status_code == 200
     assert response.json()["versionId"] == VERSION_ID
     assert response.json()["restoredSnapshot"] == "c25hcHNob3Q="
+
+
+def test_export_pdf_returns_downloadable_binary(monkeypatch):
+    async def fake_export(self, doc_id, user_id, title, text):
+        assert doc_id == DOC_ID
+        assert user_id == VIEWER_ID
+        assert title == "Roadmap"
+        assert text == "Hello export"
+        return ("roadmap.pdf", b"%PDF-1.4\nHello export")
+
+    monkeypatch.setattr("app.routes.documents.DocumentsService.export_pdf", fake_export)
+    with _no_redis():
+        response = client.post(
+            f"/api/documents/{DOC_ID}/export/pdf",
+            json={"title": "Roadmap", "text": "Hello export"},
+            cookies={"access_token": _token(VIEWER_ID)},
+        )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/pdf"
+    assert response.headers["content-disposition"] == 'attachment; filename="roadmap.pdf"'
+    assert response.content.startswith(b"%PDF-1.4")

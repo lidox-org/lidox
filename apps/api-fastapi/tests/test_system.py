@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from app.dependencies import require_auth
 from app import db as db_module
+from app.pdf_export import build_pdf_document
 from app.services import AuthService
 from app.main import app
 from app.security import AuthContext
@@ -144,6 +145,14 @@ def test_issue_tokens_serializes_uuid_claims(monkeypatch) -> None:
     assert isinstance(tokens["refreshToken"], str)
     assert isinstance(recorded["params"][0], str)
     assert isinstance(recorded["params"][2], str)
+
+
+def test_build_pdf_document_returns_pdf_bytes() -> None:
+    payload = build_pdf_document("Demo Title", "First paragraph\nSecond paragraph")
+
+    assert payload.startswith(b"%PDF-1.4")
+    assert b"Demo Title" in payload
+    assert b"First paragraph" in payload
 
 
 def test_auth_check_requires_authentication() -> None:
