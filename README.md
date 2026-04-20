@@ -56,6 +56,7 @@ JWT_SECRET=your-secret-min-32-chars
 GOOGLE_CLIENT_ID=...
 GOOGLE_CLIENT_SECRET=...
 GOOGLE_OAUTH_REDIRECT_URI=http://localhost:3001/api/auth/google/callback
+WEB_BASE_URL=http://localhost:5173
 
 # Everything else can stay as-is for local dev
 ```
@@ -122,6 +123,7 @@ npm run test:e2e:install
 ### Authentication
 
 - Register and log in with email/password
+- Optional Google OAuth login when Google client credentials are configured
 - HttpOnly access-token cookie (15 min) + rotating refresh-token cookie (7 days)
 - Refresh token reuse detection: replaying a used token revokes the entire token family
 - Change password and update display name from Settings (`/settings`)
@@ -144,12 +146,18 @@ npm run test:e2e:install
 
 - Share documents via the Share button in the editor
 - Assign roles (editor / commenter / viewer) to collaborators
+- If an active collaborator is downgraded or revoked, their live editor session is forced back to the dashboard
 
 ### Version History
 
 - Automatic snapshots stored on each meaningful save (debounced persistence from the sync server)
-- Browse versions via the clock icon in the editor header
+- Browse versions via the clock icon with stable visible numbering and preview text from the first logical lines
 - **Restore:** restoring a snapshot replaces the live editor state for connected collaborators and becomes the newest stored version
+
+### Export
+
+- Export the current document as PDF from the editor header
+- DOCX export remains future work and is tracked in `DEVIATIONS.md`
 
 ### AI Writing Tools
 
@@ -237,7 +245,7 @@ the running web application.
 The following items are out of scope for the PoC but identified as the natural next step toward production readiness:
 
 - **SSO**: GitHub OAuth and broader enterprise SSO providers
-- **Document export**: DOCX download
+- **Document export**: DOCX download and richer tracked-change export parity
 - **Accessibility**: WCAG 2.1 AA audit and remediation
 - **Partial proposal acceptance**: Per-sentence checkbox toggles (current implementation accepts/rejects the full proposal)
 - **Regenerate button**: Re-run an AI task on stale text from the proposal panel
