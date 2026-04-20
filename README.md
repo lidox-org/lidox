@@ -10,9 +10,9 @@ A real-time collaborative document editor with AI writing assistance, built as a
 |---|---|
 | Frontend | React 18, Vite, TipTap, Tailwind CSS, Zustand |
 | Real-time sync | Hocuspocus + Yjs CRDT |
-| Backend API | NestJS, Drizzle ORM, PostgreSQL 16 |
+| Backend API | FastAPI, psycopg, PostgreSQL 16 |
 | Auth | JWT (15 min) + rotating refresh tokens (7 days), HttpOnly cookies |
-| AI pipeline | BullMQ job queue → Groq SDK (llama-3.3-70b / llama-3.1-8b-instant) |
+| AI pipeline | FastAPI async tasks + Redis event streams + Groq API |
 | Infrastructure | Docker Compose (Postgres + Redis), Turborepo monorepo |
 
 ---
@@ -20,6 +20,7 @@ A real-time collaborative document editor with AI writing assistance, built as a
 ## Prerequisites
 
 - **Node.js** 20+
+- **Python** 3.12
 - **Corepack** enabled so the repo uses **npm 11.6.2**
 - **Docker** + Docker Compose
 
@@ -54,33 +55,28 @@ JWT_SECRET=your-secret-min-32-chars
 # Everything else can stay as-is for local dev
 ```
 
-Get a free Groq API key at [console.groq.com](https://console.groq.com). Without it, AI features return mock responses (the queue pipeline still runs, just with placeholder text).
+Get a free Groq API key at [console.groq.com](https://console.groq.com). Without it, AI features return mock responses while the FastAPI async task flow and SSE wiring still run end to end.
 
-### 3. Start infrastructure
-
-```bash
-docker compose up -d
-```
-
-This starts PostgreSQL 16 and Redis 7 via Docker Compose. Database tables are created automatically when the API boots for the first time.
-
-### 4. Start all services
+### 3. Start all services
 
 ```bash
-npm run dev
+./run.sh
 ```
 
-Turborepo starts all three services in parallel:
+`./run.sh` starts PostgreSQL, Redis, the FastAPI backend, the sync server, and
+the Vite web app. `npm run dev` is wired to the same launcher.
 
 | Service | URL | Description |
 |---|---|---|
 | Web frontend | http://localhost:5173 | React app |
-| API server | http://localhost:3001 | NestJS REST + auth |
+| API server | http://localhost:3001 | FastAPI REST + auth |
+| API docs | http://localhost:3001/api/docs | FastAPI OpenAPI docs |
 | Sync server | http://localhost:3002 | Hocuspocus WebSocket (CRDT) |
 
 ### Stopping
 
 ```bash
+Ctrl+C              # stop app processes
 npm run db:down   # stop Docker containers
 ```
 
@@ -91,7 +87,15 @@ npm run lint
 npm run typecheck
 npm run test:unit
 npm run test:integration
+npm --workspace @lidox/sync-server run test
 npm run test:e2e
+```
+
+FastAPI tests:
+
+```bash
+cd apps/api-fastapi
+python3.12 -m pytest tests
 ```
 
 Install the Playwright browser once before the first local e2e run:
@@ -113,7 +117,7 @@ npm run test:e2e:install
 ### Authentication
 
 - Register and log in with email/password
-- JWT access tokens (15 min) + rotating refresh tokens (7 days, HttpOnly cookie)
+- HttpOnly access-token cookie (15 min) + rotating refresh-token cookie (7 days)
 - Refresh token reuse detection: replaying a used token revokes the entire token family
 - Change password and update display name from Settings (`/settings`)
 
@@ -129,6 +133,7 @@ npm run test:e2e:install
 - Live presence avatars in the editor header show who is online
 - Colored cursors per collaborator (up to 8 distinct colors, cycling after)
 - Connection status indicator (Cloud / CloudOff)
+- Browser-local IndexedDB persistence keeps local edits available while offline and syncs them on reconnect
 
 ### Sharing
 
@@ -139,7 +144,7 @@ npm run test:e2e:install
 
 - Automatic snapshots stored on each meaningful save (debounced persistence from the sync server)
 - Browse versions via the clock icon in the editor header
-- **Restore:** the API acknowledges restore; reloading Yjs content from a chosen snapshot into the live editor is **not fully wired**—see [`DEVIATIONS.md`](./DEVIATIONS.md)
+- **Restore:** restoring a snapshot replaces the live editor state for connected collaborators and becomes the newest stored version
 
 ### AI Writing Tools
 
@@ -156,7 +161,11 @@ Select any text (3+ characters) in the editor — a floating toolbar appears abo
 
 After processing, a proposal panel slides up at the bottom of the editor with a diff view (additions in green, removals in red). You can **Accept**, **Reject**, or **Dismiss** the proposal.
 
-AI jobs run asynchronously through a BullMQ queue with up to 5 concurrent workers. The frontend receives results via **Server-Sent Events** (`GET .../ai/tasks/:taskId/stream`) after `invoke`, so proposal text can update incrementally until completion. Each interaction is logged to the database with token counts and estimated cost.
+AI tasks run asynchronously inside the FastAPI app and publish incremental
+events through Redis-backed **Server-Sent Events**
+(`GET .../ai/tasks/:taskId/stream`) after `invoke`, so proposal text updates
+incrementally until completion. Each interaction is logged to the database with
+token counts and estimated cost.
 
 **Documentation:** See [`DEVIATIONS.md`](./DEVIATIONS.md) for explicit course-spec deltas, and [`docs/`](./docs/) for JWT/auth, collaboration transport, AI flow, demo script, and Q&A notes.
 
@@ -179,8 +188,8 @@ To test collaboration locally:
 ```
 lidox/
 ├── apps/
-│   ├── api/            # NestJS backend (auth, documents, AI, WebSocket auth)
-│   ├── api-fastapi/    # FastAPI migration scaffold for Assignment 2 cutover
+│   ├── api/            # Legacy NestJS backend kept as reference code
+│   ├── api-fastapi/    # Active FastAPI backend used by the demo path
 │   ├── sync-server/    # Hocuspocus CRDT sync server
 │   └── web/            # React + Vite frontend
 ├── packages/
@@ -190,9 +199,9 @@ lidox/
 └── turbo.json
 ```
 
-The active backend remains `apps/api` for now. `apps/api-fastapi` is a parallel
-migration target being ported incrementally so the team can move to FastAPI
-without breaking the working demo path in one rewrite.
+The default demo path uses `apps/api-fastapi`. The older `apps/api` NestJS code
+remains in the repo as legacy reference code while the FastAPI backend serves
+the running web application.
 
 ---
 
@@ -205,21 +214,21 @@ without breaking the working demo path in one rewrite.
 - [x] Local email/password auth with JWT + rotating refresh tokens
 - [x] Token reuse detection + Redis deny set for revoked JTIs
 - [x] Document CRUD with role-based access control
-- [x] Version history (list + snapshots); restore **partially implemented** (see `DEVIATIONS.md`)
+- [x] Version history with working restore for connected sessions
 - [x] Sharing UI with role assignment
-- [x] AI pipeline: 6 task types, Groq SDK, BullMQ queue, model routing
+- [x] AI pipeline: 6 task types, Groq API integration, Redis-backed SSE streaming
 - [x] AI proposal diff UX: accept / reject / dismiss
 - [x] Settings page: profile name update, password change
 - [x] Mock fallback when `GROQ_API_KEY` is absent
 - [x] SHA-256 source text hash for stale proposal detection
 - [x] Token cost tracking per AI interaction
+- [x] Browser-local offline persistence with sync-on-reconnect
 
 ### Future Direction
 
 The following items are out of scope for the PoC but identified as the natural next step toward production readiness:
 
 - **SSO**: Google / GitHub OAuth (env stubs present in `.env.example`, not wired)
-- **Offline support**: IndexedDB buffer with sync-on-reconnect and "Working offline" banner
 - **Document export**: PDF / DOCX download
 - **Accessibility**: WCAG 2.1 AA audit and remediation
 - **Partial proposal acceptance**: Per-sentence checkbox toggles (current implementation accepts/rejects the full proposal)

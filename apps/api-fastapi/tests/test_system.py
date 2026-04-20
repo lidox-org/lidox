@@ -1,8 +1,13 @@
+import asyncio
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
+from uuid import uuid4, UUID
 
 from fastapi.testclient import TestClient
 
 from app.dependencies import require_auth
+from app import db as db_module
+from app.services import AuthService
 from app.main import app
 from app.security import AuthContext
 
@@ -25,6 +30,120 @@ def test_healthz_exists() -> None:
     payload = response.json()
     assert payload["service"] == "Lidox API (FastAPI)"
     assert payload["status"] in {"ok", "degraded"}
+
+
+def test_fetch_one_commits_returning_writes(monkeypatch) -> None:
+    class FakeCursor:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def execute(self, query: str, params: tuple) -> None:
+            self.query = query
+            self.params = params
+
+        async def fetchone(self) -> dict:
+            return {"id": UUID("11111111-1111-4111-8111-111111111111")}
+
+    class FakeConnection:
+        def __init__(self) -> None:
+            self.cursor_instance = FakeCursor()
+            self.commit_calls = 0
+
+        async def commit(self) -> None:
+            self.commit_calls += 1
+
+        def cursor(self) -> FakeCursor:
+            return self.cursor_instance
+
+    fake_conn = FakeConnection()
+
+    @asynccontextmanager
+    async def fake_get_db_connection():
+        yield fake_conn
+
+    monkeypatch.setattr(db_module, "get_db_connection", fake_get_db_connection)
+
+    row = asyncio.run(
+        db_module.fetch_one(
+            "INSERT INTO example(id) VALUES (%s) RETURNING id",
+            ("row-1",),
+        )
+    )
+
+    assert row == {"id": "11111111-1111-4111-8111-111111111111"}
+    assert fake_conn.commit_calls == 1
+
+
+def test_fetch_all_normalizes_uuid_values(monkeypatch) -> None:
+    class FakeCursor:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def execute(self, query: str, params: tuple) -> None:
+            self.query = query
+            self.params = params
+
+        async def fetchall(self) -> list[dict]:
+            return [
+                {
+                    "id": UUID("22222222-2222-4222-8222-222222222222"),
+                    "owner_id": UUID("33333333-3333-4333-8333-333333333333"),
+                }
+            ]
+
+    class FakeConnection:
+        def __init__(self) -> None:
+            self.cursor_instance = FakeCursor()
+            self.commit_calls = 0
+
+        async def commit(self) -> None:
+            self.commit_calls += 1
+
+        def cursor(self) -> FakeCursor:
+            return self.cursor_instance
+
+    fake_conn = FakeConnection()
+
+    @asynccontextmanager
+    async def fake_get_db_connection():
+        yield fake_conn
+
+    monkeypatch.setattr(db_module, "get_db_connection", fake_get_db_connection)
+
+    rows = asyncio.run(db_module.fetch_all("SELECT * FROM example", ()))
+
+    assert rows == [
+        {
+            "id": "22222222-2222-4222-8222-222222222222",
+            "owner_id": "33333333-3333-4333-8333-333333333333",
+        }
+    ]
+    assert fake_conn.commit_calls == 1
+
+
+def test_issue_tokens_serializes_uuid_claims(monkeypatch) -> None:
+    recorded: dict[str, object] = {}
+
+    async def fake_execute(query: str, params: tuple) -> None:
+        recorded["query"] = query
+        recorded["params"] = params
+
+    monkeypatch.setattr("app.services.execute", fake_execute)
+
+    tokens = asyncio.run(
+        AuthService().issue_tokens(uuid4(), "user@example.com", uuid4())
+    )
+
+    assert isinstance(tokens["accessToken"], str)
+    assert isinstance(tokens["refreshToken"], str)
+    assert isinstance(recorded["params"][0], str)
+    assert isinstance(recorded["params"][2], str)
 
 
 def test_auth_check_requires_authentication() -> None:
@@ -211,7 +330,7 @@ def test_ai_proposal_lifecycle(monkeypatch) -> None:
     state: dict = {"status": "queued", "appliedText": None}
 
     async def fake_invoke(doc_id: str, body, user_id: str) -> dict:
-        state["status"] = "streaming"
+        state["status"] = "processing"
         return {"taskId": TASK_ID, "status": "queued"}
 
     async def fake_status(doc_id: str, task_id: str, user_id: str) -> dict:
@@ -226,7 +345,7 @@ def test_ai_proposal_lifecycle(monkeypatch) -> None:
 
     async def fake_review(doc_id: str, task_id: str, body, user_id: str) -> dict:
         assert body.action == "accept"
-        state["status"] = "accepted"
+        state["status"] = "completed"
         state["appliedText"] = "Rewritten text"
         return {
             "taskId": task_id,
@@ -250,10 +369,10 @@ def test_ai_proposal_lifecycle(monkeypatch) -> None:
     assert r1.status_code == 200
     assert r1.json()["taskId"] == TASK_ID
 
-    # Step 2: poll status — should reflect streaming state
+    # Step 2: poll status — should reflect active processing state
     r2 = client.get(f"/api/documents/{DOC_ID}/ai/tasks/{TASK_ID}")
     assert r2.status_code == 200
-    assert r2.json()["status"] == "streaming"
+    assert r2.json()["status"] == "processing"
 
     # Step 3: accept proposal
     r3 = client.post(
@@ -264,9 +383,9 @@ def test_ai_proposal_lifecycle(monkeypatch) -> None:
     assert r3.json()["status"] == "accepted"
     assert r3.json()["appliedText"] == "Rewritten text"
 
-    # Step 4: status now shows accepted
+    # Step 4: transport status remains a completed task after review
     r4 = client.get(f"/api/documents/{DOC_ID}/ai/tasks/{TASK_ID}")
     assert r4.status_code == 200
-    assert r4.json()["status"] == "accepted"
+    assert r4.json()["status"] == "completed"
 
     app.dependency_overrides.clear()

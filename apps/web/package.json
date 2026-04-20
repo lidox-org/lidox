@@ -4,13 +4,13 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite --port 5173",
+    "dev": "vite --port ${WEB_PORT:-5173}",
     "build": "vite build",
     "typecheck": "tsc --noEmit",
     "test": "node ../../scripts/run-web-tests.mjs"
   },
   "dependencies": {
-    "@hocuspocus/provider": "^2.15.0",
+    "@hocuspocus/provider": "^3.4.4",
     "@lidox/types": "*",
     "@tiptap/extension-code-block-lowlight": "^2.10.0",
     "@tiptap/extension-collaboration": "^2.10.0",

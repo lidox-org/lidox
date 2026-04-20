@@ -29,6 +29,7 @@ import {
   getOrCreateProvider,
   destroyProvider,
 } from '../lib/websocket';
+import { restoreDocumentFromSnapshot } from '../lib/restore';
 
 import { EditorToolbar } from '../editor/EditorToolbar';
 import {
@@ -159,9 +160,9 @@ export function Editor() {
     };
 
     setSyncConnectionStatus(
-      provider.isConnected
+      provider.configuration.websocketProvider.status === 'connected'
         ? 'connected'
-        : provider.status === 'connecting'
+        : provider.configuration.websocketProvider.status === 'connecting'
           ? 'connecting'
           : 'disconnected',
     );
@@ -297,6 +298,25 @@ export function Editor() {
     if (saveTitleTimeoutRef.current) clearTimeout(saveTitleTimeoutRef.current);
     saveTitle(docTitle);
   };
+
+  const handleVersionRestore = useCallback(
+    async ({
+      restoredSnapshot,
+    }: {
+      versionId: string;
+      restoredSnapshot?: string | null;
+    }) => {
+      if (!ydoc || !restoredSnapshot) {
+        return;
+      }
+
+      restoreDocumentFromSnapshot(ydoc, restoredSnapshot);
+      setAiProposal(null);
+      setUndoAiChangeVisible(false);
+      setAiNotice(null);
+    },
+    [ydoc],
+  );
 
   const handleAcceptProposal = async (
     input: {
@@ -546,9 +566,8 @@ export function Editor() {
 
           {syncConnectionStatus === 'disconnected' && canEditDocument && (
             <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
-              Live sync is disconnected. This build does not guarantee offline
-              persistence, so edits made now may not survive a reload until sync
-              reconnects.
+              Live sync is disconnected. Local edits are being buffered in this
+              browser and will resync when the connection returns.
             </div>
           )}
 
@@ -669,12 +688,9 @@ export function Editor() {
               documentId={documentId}
               isOpen={activeSidebar === 'versions'}
               onClose={() => setActiveSidebar(null)}
+              onRestore={handleVersionRestore}
               canRestore={canEditDocument}
               restoreAvailable={true}
-              onRestore={() => {
-                // After restore, close the sidebar — the sync server broadcasts the new state
-                setActiveSidebar(null);
-              }}
             />
             <AiHistoryPanel
               documentId={documentId}

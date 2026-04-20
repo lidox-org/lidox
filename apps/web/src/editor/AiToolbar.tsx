@@ -347,7 +347,7 @@ export function AiToolbar({
     });
 
     const response = await fetchWithAuthRetry(
-      `/api/documents/${documentId}/ai/tasks/${taskId}/stream`,
+      `/documents/${documentId}/ai/tasks/${taskId}/stream`,
       {
         method: 'GET',
         headers,

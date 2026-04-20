@@ -64,6 +64,7 @@ class RestoreResponse(APIModel):
     message: str
     versionId: str
     restoredAt: datetime
+    restoredSnapshot: str | None = None
 
 
 def api_error(status_code: int, message: Any) -> HTTPException:

@@ -1,8 +1,11 @@
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
-const rootDir = process.cwd();
+const scriptDir = path.dirname(fileURLToPath(import.meta.url));
+const rootDir = path.resolve(scriptDir, '..');
 const webDir = path.join(rootDir, 'apps', 'web');
 const requireFromRoot = createRequire(path.join(rootDir, 'package.json'));
 const requireFromWeb = createRequire(path.join(webDir, 'package.json'));
@@ -29,10 +32,21 @@ if (!vitestEntrypoint) {
   process.exit(0);
 }
 
-const result = spawnSync(process.execPath, [vitestEntrypoint, 'run'], {
-  cwd: webDir,
-  stdio: 'inherit',
-});
+function runVitest(nodeCommand) {
+  return spawnSync(nodeCommand, [vitestEntrypoint, 'run'], {
+    cwd: webDir,
+    stdio: 'inherit',
+  });
+}
+
+const preferredNodeCommand = existsSync(process.execPath)
+  ? process.execPath
+  : 'node';
+
+let result = runVitest(preferredNodeCommand);
+if (result.error?.code === 'ENOENT' && preferredNodeCommand !== 'node') {
+  result = runVitest('node');
+}
 
 if (result.error) {
   throw result.error;

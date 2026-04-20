@@ -1,6 +1,6 @@
 # Live demo script (~5 minutes)
 
-Run services first: `docker compose up -d`, then `npm run dev`. Use **two browser profiles** (or normal + private) for collaboration.
+Run services first: `./run.sh`. Use **two browser profiles** (or normal + private) for collaboration.
 
 **Grading order — narrative you can follow verbatim.**
 
@@ -9,7 +9,7 @@ Run services first: `docker compose up -d`, then `npm run dev`. Use **two browse
 ### 1. Register and login (~45s)
 
 - Open `http://localhost:5173`, **Register** a user (email + password + name).
-- Confirm you land on the **Dashboard**. Mention JWT access in memory + refresh cookie (see `docs/jwt-and-auth.md`) if asked.
+- Confirm you land on the **Dashboard**. Mention cookie-based JWT auth (access + refresh cookies, see `docs/jwt-and-auth.md`) if asked.
 
 ### 2. Create a document (~20s)
 
@@ -37,11 +37,11 @@ Run services first: `docker compose up -d`, then `npm run dev`. Use **two browse
 ### 7. Version history (~45s)
 
 - Open **Version history** (clock). List past snapshots if any.
-- **Important:** If asked to “restore,” state honestly per `DEVIATIONS.md`: restore is **not** fully wired to reload editor state—do not claim full restore unless fixed before grading.
+- Click **Restore** on an older snapshot and show that the live editor content rewinds for connected clients.
 
 ### 8. Close (~15s)
 
-- Summarize stack: React + Yjs/Hocuspocus + NestJS + Postgres + Redis; AI via Groq behind queue + SSE.
+- Summarize stack: React + Yjs/Hocuspocus + FastAPI + Postgres + Redis; AI via Groq behind async tasks + SSE.
 
 ---
 

@@ -6,7 +6,8 @@
     "dev": "tsx watch src/main.ts",
     "build": "tsc",
     "start": "node dist/main.js",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node --test --import tsx ./src/**/*.test.ts"
   },
   "dependencies": {
     "@hocuspocus/server": "^3.4.4",

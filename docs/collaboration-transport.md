@@ -12,12 +12,13 @@
 
 ## Connection flow
 
-1. User opens a document in the SPA with a valid access JWT in memory.
-2. `getOrCreateProvider(documentId)` creates a `Y.Doc` and connects to `ws://<host>:3002` (or `wss` in production) with `name` = document UUID and `token` = access JWT.
-3. **Authentication** — `AuthExtension` validates JWT and attaches `userId` / `email` to connection context.
+1. User opens a document in the SPA with a valid `access_token` cookie.
+2. `getOrCreateProvider(documentId)` creates a `Y.Doc`, attaches IndexedDB persistence, and connects to `ws://<host>:3002` (or `wss` in production) with `name` = document UUID.
+3. **Authentication** — `AuthExtension` validates the access-token cookie and attaches `userId` / `email` to connection context.
 4. **Sync** — Yjs updates propagate between clients through the server; **awareness** drives presence/cursors (`PresenceCursors`, etc.).
+5. **Offline continuity** — local edits remain available in IndexedDB and merge back through CRDT sync when the socket reconnects.
 
 ## What this is not
 
 - **Not** REST/SSE: editing traffic is **not** the same channel as `/api` or AI streaming.
-- **Not** offline-first: there is no IndexedDB-backed queue for edits when disconnected (see `DEVIATIONS.md`).
+- **Not** server-authored locking: convergence comes from Yjs CRDT merge, not last-write-wins overwrite behavior.

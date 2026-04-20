@@ -1,4 +1,18 @@
-const BASE_URL = '/api';
+export const BASE_URL = '/api';
+const ABSOLUTE_URL_PATTERN = /^https?:\/\//i;
+
+export function resolveApiUrl(path: string): string {
+  if (ABSOLUTE_URL_PATTERN.test(path)) {
+    return path;
+  }
+
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  if (normalizedPath === BASE_URL || normalizedPath.startsWith(`${BASE_URL}/`)) {
+    return normalizedPath;
+  }
+
+  return `${BASE_URL}${normalizedPath}`;
+}
 
 async function tryRefreshToken(): Promise<boolean> {
   try {
@@ -35,7 +49,7 @@ export async function api<T = unknown>(
     headers.set('Content-Type', 'application/json');
   }
 
-  const url = path.startsWith('http') ? path : `${BASE_URL}${path}`;
+  const url = resolveApiUrl(path);
 
   let res = await fetch(url, { ...init, headers, credentials: 'include' });
 
@@ -67,7 +81,7 @@ export async function fetchWithAuthRetry(
   retryOptions: FetchRetryOptions = {},
 ): Promise<Response> {
   const { skipAuth, ...init } = options;
-  const url = path.startsWith('http') ? path : `${BASE_URL}${path}`;
+  const url = resolveApiUrl(path);
 
   let res = await fetch(url, { ...init, credentials: 'include' });
 

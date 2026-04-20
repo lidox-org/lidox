@@ -2,6 +2,7 @@
 Tests for auth cookie behavior and document RBAC enforcement.
 All DB/Redis calls are patched so no live infrastructure is needed.
 """
+from datetime import datetime, timezone
 import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -93,7 +94,7 @@ def test_revoked_token_rejected_on_protected_route():
     with patch("app.dependencies.get_redis", return_value=mock_redis):
         response = client.get("/api/auth-check", cookies={"access_token": token})
     assert response.status_code == 401
-    assert "revoked" in response.json()["detail"].lower()
+    assert "revoked" in response.json()["message"].lower()
 
 
 def test_refresh_rejects_missing_token():
@@ -193,3 +194,27 @@ def test_viewer_cannot_restore_version(monkeypatch):
             cookies={"access_token": _token(VIEWER_ID)},
         )
     assert response.status_code == 403
+
+
+def test_editor_restore_returns_snapshot_payload(monkeypatch):
+    async def fake_restore(self, doc_id, version_id, user_id):
+        assert doc_id == DOC_ID
+        assert version_id == VERSION_ID
+        assert user_id == EDITOR_ID
+        return {
+            "message": "Version restored and broadcast to connected clients",
+            "versionId": version_id,
+            "restoredAt": datetime.now(timezone.utc),
+            "restoredSnapshot": "c25hcHNob3Q=",
+        }
+
+    monkeypatch.setattr("app.routes.documents.DocumentsService.restore_version", fake_restore)
+    with _no_redis():
+        response = client.post(
+            f"/api/documents/{DOC_ID}/versions/{VERSION_ID}/restore",
+            cookies={"access_token": _token(EDITOR_ID)},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["versionId"] == VERSION_ID
+    assert response.json()["restoredSnapshot"] == "c25hcHNob3Q="
