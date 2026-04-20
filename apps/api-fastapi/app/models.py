@@ -43,3 +43,8 @@ class ShareDocumentInput(APIModel):
         if value not in {"editor", "commenter", "viewer"}:
             raise ValueError("Role must be editor, commenter, or viewer")
         return value
+
+
+class ExportPdfInput(APIModel):
+    title: str | None = Field(default=None, max_length=500)
+    text: str = Field(default="")

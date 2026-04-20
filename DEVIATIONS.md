@@ -13,12 +13,12 @@ not the older intermediate branches.
 | Auth delivery | Cookie-based auth described in report | **HttpOnly cookies** for both access and refresh tokens | **Resolved** |
 | AI delivery to client | Streaming with cancelation | **Server-Sent Events** (`GET .../ai/tasks/:taskId/stream`) after `invoke`; FastAPI async tasks + Redis event stream | **Resolved** |
 | Offline editing | IndexedDB buffer, sync on reconnect | Browser-local **Yjs + IndexedDB** persistence via `y-indexeddb`, then CRDT sync on reconnect | **Resolved** |
-| Identity | Optional OAuth / SSO in diagrams | **Email + password only**; OAuth env stubs only | **Not integrated** |
+| Identity | Optional OAuth / SSO in diagrams | **Email/password plus Google OAuth** when `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` are configured; GitHub OAuth remains a placeholder | **Partially resolved** |
 | Version restore | Restoring applies prior document state | Snapshot restore rewinds the active editor immediately and rebroadcasts to connected clients | **Resolved** |
 | `document_versions` storage | Single schema for API + sync | FastAPI and sync-server both use `snapshot` + `crdt_clock` rows in `document_versions` | **Resolved** |
 | AI worker topology | Assignment 1 design referenced a separate queue worker | The FastAPI app runs async AI tasks in-process and streams events from Redis | **Intentional simplification** |
-| Live permission revocation | Permission changes should cut off stale write sessions promptly | Viewer/commenter enforcement is applied on load and on new WebSocket auth; mid-session forced disconnect on downgrade is not yet implemented | **Open** |
-| Export | DOCX and PDF export | No export endpoints or UI | **Future work** |
+| Live permission revocation | Permission changes should cut off stale write sessions promptly | Permission changes are published through Redis and the sync server forcibly closes stale downgraded/revoked sessions, sending the user back to the dashboard | **Resolved** |
+| Export | DOCX and PDF export | **PDF export** is available from the editor header; **DOCX** export is still not implemented | **Partially resolved** |
 
 ## Backend technology
 
@@ -35,6 +35,7 @@ Current behavior:
 2. **Refresh token** (7-day TTL): set as **`HttpOnly` cookie** (`refresh_token`, path `/api/auth/refresh`).
 3. **WebSocket auth:** the sync server reads the access cookie from the upgrade request and verifies JWT + Redis denied-JTI set membership.
 4. **RBAC:** viewer/commenter sessions are forced read-only at the WebSocket layer for new or refreshed connections.
+5. **Google OAuth:** `/api/auth/google/start` and `/api/auth/google/callback` perform the Google sign-in flow and issue the same HttpOnly session cookies as local auth.
 
 This matches the cookie-first browser auth model expected by the report and avoids exposing auth tokens to frontend JavaScript.
 
@@ -63,9 +64,8 @@ This satisfies the Assignment 2 streaming requirement without the older BullMQ w
 
 ## Remaining gaps
 
-- **OAuth / SSO:** env placeholders exist, but only local email/password auth is wired.
-- **Document export:** PDF/DOCX export endpoints and UI are not implemented.
-- **Mid-session permission downgrade enforcement:** a user who is already connected is not forcibly disconnected the moment their role is reduced.
+- **Additional OAuth providers:** GitHub OAuth / generic SSO are still placeholders.
+- **Document export parity:** PDF export is implemented, but DOCX export is still missing.
 
 ## Tests and CI
 
