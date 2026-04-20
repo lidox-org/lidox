@@ -20,6 +20,9 @@ const mocks = vi.hoisted(() => {
   return {
     navigate: vi.fn(),
     api: vi.fn(),
+    fetchWithAuthRetry: vi.fn(),
+    destroyProvider: vi.fn(),
+    providerHandlers: new Map<string, (...args: any[]) => void>(),
     authUser: {
       id: 'user-1',
       email: 'mo@example.com',
@@ -41,6 +44,7 @@ const mocks = vi.hoisted(() => {
     },
     editor: {
       setEditable: vi.fn(),
+      getText: vi.fn(() => 'Working Draft export'),
       can: () => ({
         undo: () => true,
       }),
@@ -65,6 +69,7 @@ vi.mock('react-router-dom', async () => {
 
 vi.mock('../lib/api', () => ({
   api: (...args: unknown[]) => mocks.api(...args),
+  fetchWithAuthRetry: (...args: unknown[]) => mocks.fetchWithAuthRetry(...args),
 }));
 
 vi.mock('../lib/auth', () => ({
@@ -81,7 +86,7 @@ vi.mock('../lib/auth', () => ({
 vi.mock('../lib/websocket', () => ({
   getOrCreateDoc: () => ({}),
   getOrCreateProvider: () => mocks.provider,
-  destroyProvider: vi.fn(),
+  destroyProvider: (...args: unknown[]) => mocks.destroyProvider(...args),
 }));
 
 vi.mock('@tiptap/react', () => ({
@@ -179,12 +184,21 @@ describe('Editor', () => {
   beforeEach(() => {
     mocks.navigate.mockReset();
     mocks.api.mockReset();
+    mocks.fetchWithAuthRetry.mockReset();
+    mocks.destroyProvider.mockReset();
+    mocks.providerHandlers.clear();
     mocks.provider.awareness.setLocalStateField.mockReset();
-    mocks.provider.on.mockReset();
-    mocks.provider.off.mockReset();
+    mocks.provider.on.mockImplementation((event: string, handler: (...args: any[]) => void) => {
+      mocks.providerHandlers.set(event, handler);
+    });
+    mocks.provider.off.mockImplementation((event: string) => {
+      mocks.providerHandlers.delete(event);
+    });
     mocks.provider.configuration.websocketProvider.status = 'disconnected';
     mocks.provider.hasUnsyncedChanges = false;
     mocks.editor.setEditable.mockReset();
+    mocks.editor.getText.mockReset();
+    mocks.editor.getText.mockReturnValue('Working Draft export');
   });
 
   it('renders a viewer-safe read-only UI', async () => {
@@ -274,6 +288,97 @@ describe('Editor', () => {
 
     expect(screen.getByTestId('ai-retry-request')).toHaveTextContent(
       'rewrite',
+    );
+  });
+
+  it('downloads a PDF export from the editor header', async () => {
+    const user = userEvent.setup();
+    const createObjectURL = vi.fn(() => 'blob:lidox-pdf');
+    const revokeObjectURL = vi.fn();
+    const anchorClick = vi
+      .spyOn(HTMLAnchorElement.prototype, 'click')
+      .mockImplementation(() => {});
+
+    mocks.api.mockImplementation(async (path: string) => {
+      if (path === '/documents/doc-1') {
+        return {
+          id: 'doc-1',
+          title: 'Working Draft',
+          role: 'editor',
+          aiEnabled: true,
+        };
+      }
+
+      return [];
+    });
+    mocks.fetchWithAuthRetry.mockResolvedValue(
+      new Response('%PDF-1.4', {
+        status: 200,
+        headers: {
+          'Content-Disposition': 'attachment; filename="working-draft.pdf"',
+        },
+      }),
+    );
+    window.URL.createObjectURL = createObjectURL;
+    window.URL.revokeObjectURL = revokeObjectURL;
+
+    render(<Editor />);
+
+    expect(await screen.findByText('Working Draft')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /^pdf$/i }));
+
+    expect(mocks.fetchWithAuthRetry).toHaveBeenCalledWith(
+      '/documents/doc-1/export/pdf',
+      expect.objectContaining({
+        method: 'POST',
+      }),
+      { redirectOnFailure: true },
+    );
+    expect(createObjectURL).toHaveBeenCalled();
+    expect(anchorClick).toHaveBeenCalled();
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:lidox-pdf');
+
+    anchorClick.mockRestore();
+  });
+
+  it('redirects out of the editor when a live permission downgrade arrives', async () => {
+    mocks.api.mockImplementation(async (path: string) => {
+      if (path === '/documents/doc-1') {
+        return {
+          id: 'doc-1',
+          title: 'Working Draft',
+          role: 'editor',
+          aiEnabled: true,
+        };
+      }
+
+      return [];
+    });
+
+    render(<Editor />);
+
+    expect(await screen.findByText('Working Draft')).toBeInTheDocument();
+
+    const statelessHandler = mocks.providerHandlers.get('stateless');
+    expect(statelessHandler).toBeTypeOf('function');
+
+    statelessHandler?.({
+      payload: JSON.stringify({
+        type: 'permission-change',
+        newRole: 'viewer',
+        revoked: false,
+      }),
+    });
+
+    expect(mocks.destroyProvider).toHaveBeenCalledWith('doc-1');
+    expect(mocks.navigate).toHaveBeenCalledWith(
+      '/dashboard',
+      expect.objectContaining({
+        replace: true,
+        state: expect.objectContaining({
+          notice: expect.stringContaining('Working Draft'),
+        }),
+      }),
     );
   });
 });

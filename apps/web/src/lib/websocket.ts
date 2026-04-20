@@ -108,6 +108,14 @@ export async function clearLocalCache(documentId: string): Promise<void> {
 
 function shouldRetryAuth(reason: string): boolean {
   const normalized = reason.toLowerCase();
+  if (
+    normalized.includes('no permission') ||
+    normalized.includes('forbidden') ||
+    normalized.includes('revoked')
+  ) {
+    return false;
+  }
+
   return (
     normalized.includes('token') ||
     normalized.includes('authentication failed') ||

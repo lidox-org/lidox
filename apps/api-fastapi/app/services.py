@@ -1,14 +1,19 @@
 import hashlib
+import json
+import re
 from datetime import datetime, timedelta, timezone
+from urllib.parse import urlencode
 from uuid import uuid4
 
 import bcrypt
+import httpx
 import jwt
 from fastapi import HTTPException, status
 
 from app.config import Settings, get_settings
 from app.db import execute, fetch_all, fetch_one
 from app.http import api_error
+from app.pdf_export import build_pdf_document
 from app.redis_client import get_redis
 from app.security import AuthContext
 
@@ -19,6 +24,10 @@ ROLE_HIERARCHY = {
     "commenter": 2,
     "viewer": 1,
 }
+GOOGLE_OAUTH_STATE_AUDIENCE = "google-oauth-state"
+GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
+GOOGLE_USERINFO_URL = "https://openidconnect.googleapis.com/v1/userinfo"
+PERMISSION_EVENT_CHANNEL = "permissions:changed"
 
 
 def to_camel_row(row: dict) -> dict:
@@ -32,6 +41,7 @@ def to_camel_row(row: dict) -> dict:
         "crdt_clock": "crdtClock",
         "created_by": "createdBy",
         "snapshot_url": "snapshotUrl",
+        "preview_text": "previewText",
         "user_id": "userId",
         "link_token": "linkToken",
         "avatar_url": "avatarUrl",
@@ -61,6 +71,30 @@ def duration_to_seconds(duration: str) -> int:
     if not digits:
         return 900
     return int(int(digits) * multipliers.get(suffix, 60))
+
+
+def sanitize_filename(value: str) -> str:
+    sanitized = re.sub(r"[^A-Za-z0-9._-]+", "-", value).strip("-._")
+    return sanitized or "lidox-document"
+
+
+async def publish_permission_change_event(
+    doc_id: str,
+    user_id: str,
+    new_role: str | None,
+) -> None:
+    payload = json.dumps(
+        {
+            "documentId": doc_id,
+            "userId": user_id,
+            "newRole": new_role,
+        }
+    )
+    try:
+        await get_redis().publish(PERMISSION_EVENT_CHANNEL, payload)
+    except Exception:
+        # Permission changes still apply even if the live disconnect fan-out fails.
+        pass
 
 
 class AuthService:
@@ -118,6 +152,102 @@ class AuthService:
         if not valid:
             raise api_error(status.HTTP_401_UNAUTHORIZED, "Invalid credentials")
 
+        tokens = await self.issue_tokens(user["id"], user["email"])
+        return {"user": serialize_user(user), **tokens}
+
+    def google_oauth_enabled(self) -> bool:
+        return self.settings.google_oauth_enabled
+
+    def create_google_oauth_state_token(self, nonce: str) -> str:
+        issued_at = datetime.now(timezone.utc)
+        return jwt.encode(
+            {
+                "aud": GOOGLE_OAUTH_STATE_AUDIENCE,
+                "nonce": nonce,
+                "iat": int(issued_at.timestamp()),
+                "exp": int((issued_at + timedelta(minutes=10)).timestamp()),
+            },
+            self.settings.jwt_secret,
+            algorithm=self.settings.jwt_algorithm,
+        )
+
+    def build_google_auth_url(self, state_token: str) -> str:
+        if not self.google_oauth_enabled():
+            raise api_error(status.HTTP_503_SERVICE_UNAVAILABLE, "Google sign-in is not configured")
+
+        query = urlencode(
+            {
+                "client_id": self.settings.google_client_id,
+                "redirect_uri": self.settings.resolved_google_oauth_redirect_uri,
+                "response_type": "code",
+                "scope": "openid email profile",
+                "state": state_token,
+                "prompt": "select_account",
+            }
+        )
+        return f"https://accounts.google.com/o/oauth2/v2/auth?{query}"
+
+    def verify_google_oauth_state(self, state_token: str, expected_nonce: str) -> None:
+        try:
+            payload = jwt.decode(
+                state_token,
+                self.settings.jwt_secret,
+                algorithms=[self.settings.jwt_algorithm],
+                audience=GOOGLE_OAUTH_STATE_AUDIENCE,
+            )
+        except jwt.PyJWTError as exc:
+            raise api_error(status.HTTP_400_BAD_REQUEST, "Invalid Google OAuth state") from exc
+
+        if payload.get("nonce") != expected_nonce:
+            raise api_error(status.HTTP_400_BAD_REQUEST, "Google OAuth state did not match")
+
+    async def login_with_google_code(self, code: str) -> dict:
+        if not self.google_oauth_enabled():
+            raise api_error(status.HTTP_503_SERVICE_UNAVAILABLE, "Google sign-in is not configured")
+
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                token_response = await client.post(
+                    GOOGLE_TOKEN_URL,
+                    data={
+                        "code": code,
+                        "client_id": self.settings.google_client_id,
+                        "client_secret": self.settings.google_client_secret,
+                        "redirect_uri": self.settings.resolved_google_oauth_redirect_uri,
+                        "grant_type": "authorization_code",
+                    },
+                    headers={"Accept": "application/json"},
+                )
+                token_response.raise_for_status()
+                token_payload = token_response.json()
+
+                access_token = token_payload.get("access_token")
+                if not access_token:
+                    raise api_error(status.HTTP_401_UNAUTHORIZED, "Google did not return an access token")
+
+                profile_response = await client.get(
+                    GOOGLE_USERINFO_URL,
+                    headers={"Authorization": f"Bearer {access_token}"},
+                )
+                profile_response.raise_for_status()
+                profile = profile_response.json()
+        except HTTPException:
+            raise
+        except httpx.HTTPError as exc:
+            raise api_error(status.HTTP_502_BAD_GATEWAY, "Google sign-in failed upstream") from exc
+
+        email = str(profile.get("email") or "").strip().lower()
+        if not email:
+            raise api_error(status.HTTP_401_UNAUTHORIZED, "Google account did not provide an email")
+
+        if profile.get("email_verified") is False:
+            raise api_error(status.HTTP_401_UNAUTHORIZED, "Google account email is not verified")
+
+        user = await self.find_or_create_google_user(
+            email=email,
+            name=str(profile.get("name") or "").strip(),
+            avatar_url=str(profile.get("picture") or "").strip() or None,
+        )
         tokens = await self.issue_tokens(user["id"], user["email"])
         return {"user": serialize_user(user), **tokens}
 
@@ -214,6 +344,57 @@ class AuthService:
         if not user:
             raise api_error(status.HTTP_401_UNAUTHORIZED, "User not found")
         return serialize_user(user)
+
+    async def find_or_create_google_user(
+        self,
+        *,
+        email: str,
+        name: str,
+        avatar_url: str | None,
+    ) -> dict:
+        display_name = name or email.split("@", 1)[0]
+        existing = await fetch_one(
+            """
+            SELECT id, email, name, avatar_url
+            FROM users
+            WHERE email = %s
+            LIMIT 1
+            """,
+            (email,),
+        )
+        if existing:
+            should_update_avatar = avatar_url and avatar_url != existing.get("avatar_url")
+            if should_update_avatar:
+                updated = await fetch_one(
+                    """
+                    UPDATE users
+                    SET avatar_url = %s
+                    WHERE id = %s
+                    RETURNING id, email, name, avatar_url
+                    """,
+                    (avatar_url, existing["id"]),
+                )
+                if updated:
+                    return updated
+            return existing
+
+        org = await fetch_one(
+            """
+            INSERT INTO organizations (name)
+            VALUES (%s)
+            RETURNING id
+            """,
+            (f"{display_name}'s Org",),
+        )
+        user = await fetch_one(
+            """
+            INSERT INTO users (email, password_hash, name, avatar_url, org_id)
+            VALUES (%s, NULL, %s, %s, %s)
+            RETURNING id, email, name, avatar_url
+            """,
+            (email, display_name, avatar_url, org["id"]),
+        )
+        return user
 
     async def update_me(self, user_id: str, name: str) -> dict:
         user = await fetch_one(
@@ -356,16 +537,62 @@ class DocumentsService:
             (doc_id,),
         )
 
+    async def export_pdf(self, doc_id: str, user_id: str, title: str | None, text: str) -> tuple[str, bytes]:
+        document = await self.find_document(doc_id)
+        role = await self.get_user_role(doc_id, user_id)
+        if not role:
+            raise api_error(status.HTTP_403_FORBIDDEN, "No access to this document")
+
+        export_title = (title or "").strip() or document["title"]
+        pdf_bytes = build_pdf_document(export_title, text)
+        filename = f"{sanitize_filename(export_title)}.pdf"
+        return filename, pdf_bytes
+
     async def list_versions(self, doc_id: str, user_id: str) -> list[dict]:
         role = await self.get_user_role(doc_id, user_id)
         if not role:
             raise api_error(status.HTTP_403_FORBIDDEN, "No access to this document")
         rows = await fetch_all(
             """
-            SELECT id, document_id, NULL::TEXT AS snapshot_url, crdt_clock, created_by, created_at
-            FROM document_versions
-            WHERE document_id = %s
-            ORDER BY created_at DESC
+            WITH ordered_versions AS (
+                SELECT
+                    v.id,
+                    v.document_id,
+                    v.snapshot,
+                    NULL::TEXT AS snapshot_url,
+                    COALESCE(v.preview_text, '') AS preview_text,
+                    COALESCE(u.name, u.email, v.created_by::TEXT) AS created_by,
+                    v.created_at,
+                    LAG(v.snapshot) OVER (ORDER BY v.created_at ASC, v.id ASC) AS previous_snapshot
+                FROM document_versions v
+                LEFT JOIN users u ON u.id = v.created_by
+                WHERE v.document_id = %s
+            ),
+            visible_versions AS (
+                SELECT
+                    id,
+                    document_id,
+                    snapshot_url,
+                    preview_text,
+                    created_by,
+                    created_at
+                FROM ordered_versions
+                WHERE previous_snapshot IS DISTINCT FROM snapshot
+            ),
+            numbered_versions AS (
+                SELECT
+                    id,
+                    document_id,
+                    snapshot_url,
+                    ROW_NUMBER() OVER (ORDER BY created_at ASC, id ASC) AS crdt_clock,
+                    NULLIF(preview_text, '') AS preview_text,
+                    created_by,
+                    created_at
+                FROM visible_versions
+            )
+            SELECT id, document_id, snapshot_url, crdt_clock, preview_text, created_by, created_at
+            FROM numbered_versions
+            ORDER BY created_at DESC, id DESC
             LIMIT 50
             """,
             (doc_id,),
@@ -381,7 +608,7 @@ class DocumentsService:
             )
         version = await fetch_one(
             """
-            SELECT id, snapshot, crdt_clock
+            SELECT id, snapshot, crdt_clock, preview_text, snapshot_hash
             FROM document_versions
             WHERE id = %s AND document_id = %s
             LIMIT 1
@@ -398,10 +625,24 @@ class DocumentsService:
 
         await execute(
             """
-            INSERT INTO document_versions (document_id, snapshot, crdt_clock, created_by)
-            VALUES (%s, %s, %s, %s)
+            INSERT INTO document_versions (
+                document_id,
+                snapshot,
+                crdt_clock,
+                created_by,
+                preview_text,
+                snapshot_hash
+            )
+            VALUES (%s, %s, %s, %s, %s, %s)
             """,
-            (doc_id, version["snapshot"], version["crdt_clock"], user_id),
+            (
+                doc_id,
+                version["snapshot"],
+                version["crdt_clock"],
+                user_id,
+                version.get("preview_text"),
+                version.get("snapshot_hash"),
+            ),
         )
         try:
             await get_redis().publish(
@@ -496,6 +737,7 @@ class PermissionsService:
                 (doc_id, target_user["id"], role),
             )
 
+        await publish_permission_change_event(doc_id, target_user["id"], perm["role"])
         return await self.enrich_permission(perm)
 
     async def list_for_document(self, doc_id: str, caller_id: str) -> list[dict]:
@@ -540,7 +782,7 @@ class PermissionsService:
         await self.assert_caller_is_owner(doc_id, caller_id)
         permission = await fetch_one(
             """
-            SELECT id, role
+            SELECT id, user_id, role
             FROM permissions
             WHERE id = %s AND document_id = %s
             LIMIT 1
@@ -552,6 +794,7 @@ class PermissionsService:
         if permission["role"] == "owner":
             raise api_error(status.HTTP_403_FORBIDDEN, "Cannot revoke owner permission")
         await execute("DELETE FROM permissions WHERE id = %s", (permission_id,))
+        await publish_permission_change_event(doc_id, permission["user_id"], None)
         return {"deleted": True}
 
     async def assert_caller_is_owner(self, doc_id: str, user_id: str) -> None:

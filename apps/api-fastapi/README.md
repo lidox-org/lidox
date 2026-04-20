@@ -9,7 +9,9 @@ NestJS code remains in the repo only as legacy reference code.
 - FastAPI application with documented OpenAPI output
 - `.env` loading aligned to the repo root
 - JWT cookie auth with refresh/logout helpers
+- Google OAuth start/callback flow that issues the same HttpOnly session cookies
 - document CRUD, sharing, versions, and restore route coverage
+- PDF export endpoint for the current editor content
 - AI invoke/status/stream/cancel/review/history routes
 - health and auth-check routes for smoke verification
 - pytest coverage for auth, RBAC, and AI route lifecycles

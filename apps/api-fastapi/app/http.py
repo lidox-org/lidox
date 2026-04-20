@@ -39,6 +39,7 @@ class VersionOut(APIModel):
     documentId: str
     snapshotUrl: str | None = None
     crdtClock: int
+    previewText: str | None = None
     createdBy: str
     createdAt: datetime
 

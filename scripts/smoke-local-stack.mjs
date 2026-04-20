@@ -113,12 +113,25 @@ function getDocumentHtml(doc) {
 
 async function connectProvider(documentId, cookieJar, label) {
   const doc = new Y.Doc();
+  const statelessMessages = [];
+  const closeEvents = [];
   const provider = new HocuspocusProvider({
     url: SYNC_URL,
     name: documentId,
     document: doc,
     token: 'cookie-auth',
     WebSocketPolyfill: makeWebSocketPolyfill(cookieJar),
+  });
+
+  provider.on('stateless', ({ payload }) => {
+    try {
+      statelessMessages.push(JSON.parse(payload));
+    } catch {
+      statelessMessages.push(payload);
+    }
+  });
+  provider.on('close', ({ event }) => {
+    closeEvents.push(event);
   });
 
   await waitFor(
@@ -128,7 +141,7 @@ async function connectProvider(documentId, cookieJar, label) {
     `${label} provider authentication`,
   );
 
-  return { doc, provider };
+  return { closeEvents, doc, provider, statelessMessages };
 }
 
 async function main() {
@@ -198,6 +211,11 @@ async function main() {
     const versions = await apiRequest(`/api/documents/${documentId}/versions`, {
       cookieJar: owner.cookieJar,
     });
+    assert.equal(versions.payload.length, 2);
+    assert.equal(versions.payload[0].crdtClock, 2);
+    assert.equal(versions.payload[1].crdtClock, 1);
+    assert.match(versions.payload[0].previewText ?? '', /Version two/);
+    assert.match(versions.payload[1].previewText ?? '', /Version one/);
     const oldestVersion = versions.payload.at(-1);
     assert.ok(oldestVersion, 'expected at least one stored version');
 
@@ -215,6 +233,39 @@ async function main() {
         getDocumentHtml(editorClient.doc) === '<p>Version one</p>',
       'restore to propagate to both connected clients',
     );
+
+    const exportResponse = await fetch(`${API_BASE}/api/documents/${documentId}/export/pdf`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        cookie: owner.cookieJar,
+      },
+      body: JSON.stringify({
+        title: 'Smoke Export',
+        text: 'Version one\nVersion two',
+      }),
+    });
+    assert.equal(exportResponse.status, 200);
+    assert.equal(exportResponse.headers.get('content-type'), 'application/pdf');
+    const exportBytes = Buffer.from(await exportResponse.arrayBuffer());
+    assert.match(exportBytes.slice(0, 8).toString('latin1'), /%PDF-1.4/);
+
+    await apiRequest(`/api/documents/${documentId}/share`, {
+      method: 'POST',
+      cookieJar: owner.cookieJar,
+      body: { email: editor.email, role: 'viewer' },
+    });
+
+    await waitFor(
+      () =>
+        editorClient.statelessMessages.some(
+          (message) =>
+            typeof message === 'object' &&
+            message?.type === 'permission-change',
+        ),
+      'permission downgrade message to reach the connected editor',
+    );
+    assert.ok(editorClient.closeEvents.length >= 1);
   } finally {
     ownerClient.provider.destroy();
     editorClient.provider.destroy();

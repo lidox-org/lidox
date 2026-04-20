@@ -52,6 +52,11 @@ GROQ_API_KEY=gsk_...
 # Required for auth security — change this in any non-local environment
 JWT_SECRET=your-secret-min-32-chars
 
+# Optional: enable Google OAuth on the login screen
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+GOOGLE_OAUTH_REDIRECT_URI=http://localhost:3001/api/auth/google/callback
+
 # Everything else can stay as-is for local dev
 ```
 
@@ -212,10 +217,12 @@ the running web application.
 - [x] CRDT real-time collaboration (Yjs + Hocuspocus)
 - [x] Live presence cursors and avatars
 - [x] Local email/password auth with JWT + rotating refresh tokens
+- [x] Google OAuth login flow when Google client credentials are configured
 - [x] Token reuse detection + Redis deny set for revoked JTIs
 - [x] Document CRUD with role-based access control
 - [x] Version history with working restore for connected sessions
 - [x] Sharing UI with role assignment
+- [x] Forced mid-session disconnect on permission downgrade / revoke
 - [x] AI pipeline: 6 task types, Groq API integration, Redis-backed SSE streaming
 - [x] AI proposal diff UX: accept / reject / dismiss
 - [x] Settings page: profile name update, password change
@@ -223,13 +230,14 @@ the running web application.
 - [x] SHA-256 source text hash for stale proposal detection
 - [x] Token cost tracking per AI interaction
 - [x] Browser-local offline persistence with sync-on-reconnect
+- [x] PDF export from the editor header
 
 ### Future Direction
 
 The following items are out of scope for the PoC but identified as the natural next step toward production readiness:
 
-- **SSO**: Google / GitHub OAuth (env stubs present in `.env.example`, not wired)
-- **Document export**: PDF / DOCX download
+- **SSO**: GitHub OAuth and broader enterprise SSO providers
+- **Document export**: DOCX download
 - **Accessibility**: WCAG 2.1 AA audit and remediation
 - **Partial proposal acceptance**: Per-sentence checkbox toggles (current implementation accepts/rejects the full proposal)
 - **Regenerate button**: Re-run an AI task on stale text from the proposal panel
