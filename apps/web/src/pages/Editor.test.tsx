@@ -27,11 +27,14 @@ const mocks = vi.hoisted(() => {
       avatarUrl: null as string | null,
     },
     provider: {
+      configuration: {
+        websocketProvider: {
+          status: 'disconnected',
+        },
+      },
       awareness: {
         setLocalStateField: vi.fn(),
       },
-      isConnected: false,
-      status: 'disconnected',
       hasUnsyncedChanges: false,
       on: vi.fn(),
       off: vi.fn(),
@@ -179,8 +182,7 @@ describe('Editor', () => {
     mocks.provider.awareness.setLocalStateField.mockReset();
     mocks.provider.on.mockReset();
     mocks.provider.off.mockReset();
-    mocks.provider.isConnected = false;
-    mocks.provider.status = 'disconnected';
+    mocks.provider.configuration.websocketProvider.status = 'disconnected';
     mocks.provider.hasUnsyncedChanges = false;
     mocks.editor.setEditable.mockReset();
   });
@@ -231,7 +233,7 @@ describe('Editor', () => {
     expect(await screen.findByText('Working Draft')).toBeInTheDocument();
     expect(screen.getByText('Sync disconnected')).toBeInTheDocument();
     expect(
-      screen.getByText(/does not guarantee offline persistence/i),
+      screen.getByText(/local edits are being buffered in this browser/i),
     ).toBeInTheDocument();
     expect(screen.getByTestId('editor-toolbar')).toHaveTextContent(
       'Toolbar active',

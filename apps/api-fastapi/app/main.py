@@ -32,9 +32,9 @@ def create_app() -> FastAPI:
         openapi_url="/api/openapi.json",
         lifespan=lifespan,
         description=(
-            "FastAPI migration scaffold for the Lidox Assignment 2 backend. "
-            "This app is intentionally running in parallel with the existing "
-            "NestJS implementation until endpoint parity is complete."
+            "FastAPI backend for the Lidox Assignment 2 submission. "
+            "It serves the auth, documents, AI, and system routes used by the "
+            "demo web client."
         ),
     )
 
@@ -48,7 +48,7 @@ def create_app() -> FastAPI:
 
     @app.get("/", include_in_schema=False)
     async def root() -> dict[str, str]:
-        return {"message": "Lidox FastAPI migration scaffold"}
+        return {"message": "Lidox FastAPI backend"}
 
     @app.exception_handler(HTTPException)
     async def http_exception_handler(_request: Request, exc: HTTPException) -> JSONResponse:

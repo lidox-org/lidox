@@ -2,15 +2,17 @@
 
 Use these to answer common evaluator questions without contradicting the code.
 
-## Why NestJS instead of FastAPI?
+## Is the backend FastAPI?
 
-Assignment 2 mentions FastAPI; this PoC uses **NestJS** for historical/team reasons. It is an **explicit deviation** (`DEVIATIONS.md`). Documenting it avoids a silent mismatch; it may not remove a strict technology rubric requirement.
+Yes. The runnable submission uses **FastAPI** in `apps/api-fastapi`. The older
+NestJS code remains in the repo as legacy reference code, but `run.sh` and
+`npm run dev` start FastAPI by default.
 
 ## How does authentication work?
 
-- **Access:** JWT in **memory**, sent as **Bearer** on REST.
-- **Refresh:** **HttpOnly cookie** to obtain new access tokens.
-- **WebSocket:** Access JWT passed on the Hocuspocus connection—not the refresh cookie.
+- **Access:** JWT in an **HttpOnly cookie** (`access_token`).
+- **Refresh:** **HttpOnly cookie** (`refresh_token`) for silent session rotation.
+- **WebSocket:** the sync server authenticates from the access-token cookie sent during the upgrade request.
 
 ## Is AI “streaming”?
 
@@ -18,11 +20,13 @@ Yes at the **HTTP** layer: the browser consumes **Server-Sent Events** from `...
 
 ## Is offline mode implemented?
 
-**No.** Future work only. Do not claim offline buffering or sync-on-reconnect.
+Yes for the browser demo path. The editor persists its Yjs document to
+IndexedDB, and Hocuspocus/Yjs merge local changes back in on reconnect.
 
 ## Does version restore fully work?
 
-**Not end-to-end.** The API returns success; applying snapshot data back into the live Yjs session is **incomplete** (`DEVIATIONS.md`). Say “partial / in progress” unless the team lands a fix.
+Yes. Restoring a version republishes the selected snapshot through the sync
+server, and connected editors receive the restored content.
 
 ## What should we trust: LaTeX spec or the repo?
 

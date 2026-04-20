@@ -41,7 +41,7 @@ def to_camel_row(row: dict) -> dict:
 
 def serialize_user(row: dict) -> dict:
     return {
-        "id": row["id"],
+        "id": str(row["id"]),
         "email": row["email"],
         "name": row["name"],
         "avatarUrl": row.get("avatar_url"),
@@ -241,6 +241,7 @@ class AuthService:
         email: str,
         family_id: str | None = None,
     ) -> dict:
+        user_id = str(user_id)
         jti = str(uuid4())
         issued_at = datetime.now(timezone.utc)
         expires_in = duration_to_seconds(self.settings.jwt_expiration)
@@ -258,7 +259,7 @@ class AuthService:
 
         raw_refresh_token = str(uuid4())
         token_hash = self.hash_token(raw_refresh_token)
-        family = family_id or str(uuid4())
+        family = str(family_id) if family_id else str(uuid4())
         expires_at = issued_at + timedelta(days=self.settings.refresh_token_expiration_days)
 
         await execute(
@@ -414,6 +415,7 @@ class DocumentsService:
             "message": "Version restored and broadcast to connected clients",
             "versionId": version["id"],
             "restoredAt": datetime.now(timezone.utc),
+            "restoredSnapshot": version["snapshot"],
         }
 
     async def find_document(self, doc_id: str) -> dict:

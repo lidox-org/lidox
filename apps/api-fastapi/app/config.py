@@ -1,7 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -28,10 +28,16 @@ class Settings(BaseSettings):
         alias="JWT_SECRET",
     )
     jwt_algorithm: str = "HS256"
-    jwt_expiration: str = Field(default="15m", alias="JWT_EXPIRATION")
+    jwt_expiration: str = Field(
+        default="15m",
+        validation_alias=AliasChoices("JWT_EXPIRATION", "JWT_EXPIRES_IN"),
+    )
     refresh_token_expiration_days: int = Field(
         default=7,
-        alias="REFRESH_TOKEN_EXPIRATION_DAYS",
+        validation_alias=AliasChoices(
+            "REFRESH_TOKEN_EXPIRATION_DAYS",
+            "REFRESH_TOKEN_EXPIRES_IN",
+        ),
     )
     groq_api_key: str = Field(default="", alias="GROQ_API_KEY")
     groq_default_model: str = Field(
@@ -51,6 +57,21 @@ class Settings(BaseSettings):
     @property
     def service_port(self) -> int:
         return self.fastapi_port or self.api_port
+
+    @field_validator("refresh_token_expiration_days", mode="before")
+    @classmethod
+    def parse_refresh_token_expiration_days(cls, value: object) -> int:
+        if isinstance(value, int):
+            return value
+
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized.endswith("d") and normalized[:-1].isdigit():
+                return int(normalized[:-1])
+            if normalized.isdigit():
+                return int(normalized)
+
+        return 7
 
 
 @lru_cache

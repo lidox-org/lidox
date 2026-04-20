@@ -29,6 +29,7 @@ import {
   getOrCreateProvider,
   destroyProvider,
 } from '../lib/websocket';
+import { restoreDocumentFromSnapshot } from '../lib/restore';
 
 import { EditorToolbar } from '../editor/EditorToolbar';
 import {
@@ -39,6 +40,7 @@ import {
 import { AiProposal } from '../editor/AiProposal';
 import { AiHistoryPanel } from '../editor/AiHistoryPanel';
 import { encodeStateVector, serializeRange } from '../editor/aiSelection';
+import { normalizeAiReplacementHtml } from '../editor/aiSelection';
 import { PresenceCursors } from '../editor/PresenceCursors';
 import { ShareDialog } from '../editor/ShareDialog';
 import { VersionHistory } from '../editor/VersionHistory';
@@ -159,9 +161,9 @@ export function Editor() {
     };
 
     setSyncConnectionStatus(
-      provider.isConnected
+      provider.configuration.websocketProvider.status === 'connected'
         ? 'connected'
-        : provider.status === 'connecting'
+        : provider.configuration.websocketProvider.status === 'connecting'
           ? 'connecting'
           : 'disconnected',
     );
@@ -298,6 +300,25 @@ export function Editor() {
     saveTitle(docTitle);
   };
 
+  const handleVersionRestore = useCallback(
+    async ({
+      restoredSnapshot,
+    }: {
+      versionId: string;
+      restoredSnapshot?: string | null;
+    }) => {
+      if (!ydoc || !restoredSnapshot) {
+        return;
+      }
+
+      restoreDocumentFromSnapshot(ydoc, restoredSnapshot);
+      setAiProposal(null);
+      setUndoAiChangeVisible(false);
+      setAiNotice(null);
+    },
+    [ydoc],
+  );
+
   const handleAcceptProposal = async (
     input: {
       text: string;
@@ -329,14 +350,22 @@ export function Editor() {
       });
 
       if (!aiProposal.readOnly && currentSelection) {
+        const replacementHtml = normalizeAiReplacementHtml({
+          originalHtml: currentSelection.html,
+          proposedText: input.text,
+          proposedHtml: input.html,
+        });
+
         editor
           .chain()
           .focus()
-          .deleteRange({
-            from: aiProposal.anchorFrom,
-            to: aiProposal.anchorTo,
-          })
-          .insertContentAt(aiProposal.anchorFrom, appliedContent)
+          .insertContentAt(
+            {
+              from: aiProposal.anchorFrom,
+              to: aiProposal.anchorTo,
+            },
+            replacementHtml,
+          )
           .run();
 
         setUndoAiChangeVisible(true);
@@ -546,9 +575,8 @@ export function Editor() {
 
           {syncConnectionStatus === 'disconnected' && canEditDocument && (
             <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
-              Live sync is disconnected. This build does not guarantee offline
-              persistence, so edits made now may not survive a reload until sync
-              reconnects.
+              Live sync is disconnected. Local edits are being buffered in this
+              browser and will resync when the connection returns.
             </div>
           )}
 
@@ -669,12 +697,9 @@ export function Editor() {
               documentId={documentId}
               isOpen={activeSidebar === 'versions'}
               onClose={() => setActiveSidebar(null)}
+              onRestore={handleVersionRestore}
               canRestore={canEditDocument}
               restoreAvailable={true}
-              onRestore={() => {
-                // After restore, close the sidebar — the sync server broadcasts the new state
-                setActiveSidebar(null);
-              }}
             />
             <AiHistoryPanel
               documentId={documentId}

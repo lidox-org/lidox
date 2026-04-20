@@ -1,20 +1,30 @@
 import * as Y from 'yjs';
 import { HocuspocusProvider } from '@hocuspocus/provider';
+import { IndexeddbPersistence } from 'y-indexeddb';
 
 // Derive the WebSocket URL from current page hostname so it works in any environment
 function getSyncUrl(): string {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  return `${protocol}//${window.location.hostname}:3002`;
+  const syncPort = import.meta.env.VITE_SYNC_PORT || '3002';
+  return `${protocol}//${window.location.hostname}:${syncPort}`;
 }
 
 const providers = new Map<string, HocuspocusProvider>();
 const docs = new Map<string, Y.Doc>();
+const persistences = new Map<string, IndexeddbPersistence>();
+
+function persistenceName(documentId: string): string {
+  return `lidox:${documentId}`;
+}
 
 export function getOrCreateDoc(documentId: string): Y.Doc {
   let doc = docs.get(documentId);
   if (!doc) {
     doc = new Y.Doc();
     docs.set(documentId, doc);
+
+    const persistence = new IndexeddbPersistence(persistenceName(documentId), doc);
+    persistences.set(documentId, persistence);
   }
   return doc;
 }
@@ -29,7 +39,6 @@ export function getOrCreateProvider(documentId: string): HocuspocusProvider {
     url: getSyncUrl(),
     name: documentId,
     document: doc,
-    broadcast: false,
     onConnect: () => {
       console.log(`[ws] connected to document ${documentId}`);
     },
@@ -67,6 +76,12 @@ export function destroyProvider(documentId: string): void {
     doc.destroy();
     docs.delete(documentId);
   }
+
+  const persistence = persistences.get(documentId);
+  if (persistence) {
+    void persistence.destroy();
+    persistences.delete(documentId);
+  }
 }
 
 export function getAwareness(documentId: string) {
@@ -75,8 +90,20 @@ export function getAwareness(documentId: string) {
 }
 
 export async function clearLocalCache(documentId: string): Promise<void> {
-  // Offline IndexedDB persistence is not enabled in the current submission.
-  void documentId;
+  const existing = persistences.get(documentId);
+  if (existing) {
+    await existing.clearData();
+    return;
+  }
+
+  const tempDoc = new Y.Doc();
+  const tempPersistence = new IndexeddbPersistence(persistenceName(documentId), tempDoc);
+  try {
+    await tempPersistence.clearData();
+  } finally {
+    tempDoc.destroy();
+    await tempPersistence.destroy();
+  }
 }
 
 function shouldRetryAuth(reason: string): boolean {

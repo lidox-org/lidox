@@ -15,10 +15,20 @@ interface Props {
   documentId: string;
   isOpen: boolean;
   onClose: () => void;
-  onRestore?: (versionId: string) => void;
+  onRestore?: (input: {
+    versionId: string;
+    restoredSnapshot?: string | null;
+  }) => Promise<void> | void;
   canRestore?: boolean;
   restoreAvailable?: boolean;
   restoreReason?: string;
+}
+
+interface RestoreResponse {
+  message: string;
+  versionId: string;
+  restoredAt: string;
+  restoredSnapshot?: string | null;
 }
 
 export function VersionHistory({
@@ -33,9 +43,14 @@ export function VersionHistory({
   const [versions, setVersions] = useState<Version[]>([]);
   const [loading, setLoading] = useState(false);
   const [restoring, setRestoring] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<{
+    tone: 'success' | 'error';
+    message: string;
+  } | null>(null);
 
   const fetchVersions = useCallback(async () => {
     setLoading(true);
+    setFeedback(null);
     try {
       const data = await api<Version[]>(`/documents/${documentId}/versions`);
       setVersions(data);
@@ -56,13 +71,28 @@ export function VersionHistory({
     if (!restoreAvailable || !canRestore) return;
 
     setRestoring(versionId);
+    setFeedback(null);
     try {
-      await api(`/documents/${documentId}/versions/${versionId}/restore`, {
-        method: 'POST',
+      const response = await api<RestoreResponse>(
+        `/documents/${documentId}/versions/${versionId}/restore`,
+        {
+          method: 'POST',
+        },
+      );
+      await onRestore?.({
+        versionId,
+        restoredSnapshot: response.restoredSnapshot,
       });
-      onRestore?.(versionId);
-    } catch {
-      // ignore
+      setFeedback({
+        tone: 'success',
+        message: 'Version restored. Connected editors will see the restored content shortly.',
+      });
+      await fetchVersions();
+    } catch (err) {
+      setFeedback({
+        tone: 'error',
+        message: err instanceof Error ? err.message : 'Failed to restore this version.',
+      });
     } finally {
       setRestoring(null);
     }
@@ -115,6 +145,18 @@ export function VersionHistory({
       {!restoreAvailable && (
         <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800">
           {restoreReason}
+        </div>
+      )}
+
+      {feedback && (
+        <div
+          className={`border-b px-4 py-2 text-xs ${
+            feedback.tone === 'success'
+              ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+              : 'border-red-200 bg-red-50 text-red-800'
+          }`}
+        >
+          {feedback.message}
         </div>
       )}
 

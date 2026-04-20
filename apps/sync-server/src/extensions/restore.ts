@@ -5,6 +5,47 @@ import { Pool } from 'pg';
 import * as Y from 'yjs';
 import { config } from '../config';
 
+function cloneXmlContent(
+  fragment: Y.XmlFragment,
+): Array<Y.XmlElement | Y.XmlText> {
+  return fragment
+    .toArray()
+    .flatMap((node) =>
+      node instanceof Y.XmlElement || node instanceof Y.XmlText
+        ? [node.clone()]
+        : [],
+    );
+}
+
+export function restoreDocumentFromSnapshot(
+  liveDoc: Y.Doc,
+  snapshotBase64: string,
+): number {
+  const snapshotUpdate = Buffer.from(snapshotBase64, 'base64');
+  const snapshotDoc = new Y.Doc();
+  Y.applyUpdate(snapshotDoc, new Uint8Array(snapshotUpdate));
+
+  const rootKeys = Array.from(
+    new Set([...liveDoc.share.keys(), ...snapshotDoc.share.keys()]),
+  );
+
+  liveDoc.transact(() => {
+    for (const key of rootKeys) {
+      const liveFragment = liveDoc.getXmlFragment(key);
+      const snapshotFragment = snapshotDoc.getXmlFragment(key);
+
+      liveFragment.delete(0, liveFragment.length);
+
+      const restoredNodes = cloneXmlContent(snapshotFragment);
+      if (restoredNodes.length > 0) {
+        liveFragment.insert(0, restoredNodes);
+      }
+    }
+  }, 'version-restore');
+
+  return rootKeys.length;
+}
+
 /**
  * Version restore extension.
  *
@@ -15,7 +56,8 @@ import { config } from '../config';
  *
  * On receipt:
  * 1. Finds the live Hocuspocus document (if any clients are connected).
- * 2. Applies the snapshot as a full state replacement via Yjs.
+ * 2. Rebuilds the live Yjs fragment from the snapshot so later edits are
+ *    actually reverted instead of merged on top.
  * 3. Hocuspocus broadcasts the new state to all connected clients automatically.
  */
 export class RestoreExtension implements Extension {
@@ -100,15 +142,9 @@ export class RestoreExtension implements Extension {
       if (hocuspocusDocuments) {
         const liveDoc = hocuspocusDocuments.get(documentId);
         if (liveDoc) {
-          const update = Buffer.from(snapshot, 'base64');
-          // Replace the entire document state with the snapshot.
-          // encodeStateAsUpdate from the snapshot becomes the new baseline.
-          const snapshotDoc = new Y.Doc();
-          Y.applyUpdate(snapshotDoc, new Uint8Array(update));
-          const replacementUpdate = Y.encodeStateAsUpdate(snapshotDoc);
-          Y.applyUpdate(liveDoc, replacementUpdate);
+          const restoredRoots = restoreDocumentFromSnapshot(liveDoc, snapshot);
           console.log(
-            `[restore] applied snapshot to live doc ${documentId} (${replacementUpdate.length} bytes)`,
+            `[restore] applied snapshot to live doc ${documentId} across ${restoredRoots} root fragment(s)`,
           );
         } else {
           console.log(
