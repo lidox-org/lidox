@@ -14,6 +14,12 @@ export interface HtmlSentenceSlice {
   html: string;
 }
 
+interface NormalizeAiReplacementInput {
+  originalHtml: string;
+  proposedText: string;
+  proposedHtml?: string;
+}
+
 export function serializeCurrentSelection(
   editor: Editor,
 ): SerializedSelectionRange | null {
@@ -64,6 +70,32 @@ export function htmlToText(html: string): string {
   const parser = new DOMParser();
   const parsed = parser.parseFromString(html, 'text/html');
   return parsed.body.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+}
+
+export function normalizeAiReplacementHtml(
+  input: NormalizeAiReplacementInput,
+): string {
+  const fallbackText = normalizeText(input.proposedText);
+  const parsedCandidate = parseGeneratedHtmlCandidate(input.proposedHtml);
+
+  if (!parsedCandidate) {
+    return escapeHtml(fallbackText);
+  }
+
+  if (isInlineHtmlFragment(input.originalHtml)) {
+    unwrapSingleBlockWrapper(parsedCandidate);
+
+    if (containsBlockElements(parsedCandidate)) {
+      return escapeHtml(normalizeText(parsedCandidate.textContent ?? fallbackText));
+    }
+  }
+
+  const normalizedHtml = parsedCandidate.innerHTML.trim();
+  if (!normalizedHtml) {
+    return escapeHtml(fallbackText);
+  }
+
+  return normalizedHtml;
 }
 
 export function splitHtmlFragmentIntoSentences(
@@ -141,6 +173,124 @@ function splitTextIntoSentenceRanges(
 function normalizeText(text: string): string {
   return text.replace(/\s+/g, ' ').trim();
 }
+
+function escapeHtml(text: string): string {
+  const container = document.createElement('div');
+  container.textContent = text;
+  return container.innerHTML;
+}
+
+function parseGeneratedHtmlCandidate(
+  html: string | undefined,
+): HTMLDivElement | null {
+  const raw = stripMarkdownFences(html ?? '').trim();
+  if (!raw) {
+    return null;
+  }
+
+  for (const candidate of [raw, decodeHtmlEntities(raw)]) {
+    if (!looksLikeHtml(candidate)) {
+      continue;
+    }
+
+    const temporaryDocument = document.implementation.createHTMLDocument();
+    const container = temporaryDocument.createElement('div');
+    container.innerHTML = candidate;
+
+    if (container.querySelector('*')) {
+      return container;
+    }
+  }
+
+  return null;
+}
+
+function stripMarkdownFences(value: string): string {
+  const match = value.match(/^```(?:html)?\s*([\s\S]*?)\s*```$/i);
+  return match ? match[1] : value;
+}
+
+function decodeHtmlEntities(value: string): string {
+  const temporaryDocument = document.implementation.createHTMLDocument();
+  const container = temporaryDocument.createElement('textarea');
+  container.innerHTML = value;
+  return container.value;
+}
+
+function looksLikeHtml(value: string): boolean {
+  return /<\/?[a-z][\w:-]*\b[^>]*>/i.test(value);
+}
+
+function isInlineHtmlFragment(html: string): boolean {
+  const temporaryDocument = document.implementation.createHTMLDocument();
+  const container = temporaryDocument.createElement('div');
+  container.innerHTML = html;
+
+  return !containsBlockElements(container);
+}
+
+function unwrapSingleBlockWrapper(container: HTMLElement): void {
+  let wrapper = container.firstElementChild;
+
+  while (
+    wrapper &&
+    container.childElementCount === 1 &&
+    (container.textContent?.trim() ?? '').length > 0 &&
+    isBlockElement(wrapper.tagName)
+  ) {
+    container.innerHTML = wrapper.innerHTML;
+    wrapper = container.firstElementChild;
+  }
+}
+
+function containsBlockElements(container: ParentNode): boolean {
+  return container.querySelector(BLOCK_ELEMENT_SELECTOR) !== null;
+}
+
+function isBlockElement(tagName: string): boolean {
+  return BLOCK_ELEMENT_TAGS.has(tagName.toLowerCase());
+}
+
+const BLOCK_ELEMENT_TAGS = new Set([
+  'address',
+  'article',
+  'aside',
+  'blockquote',
+  'details',
+  'dialog',
+  'div',
+  'dl',
+  'fieldset',
+  'figcaption',
+  'figure',
+  'footer',
+  'form',
+  'h1',
+  'h2',
+  'h3',
+  'h4',
+  'h5',
+  'h6',
+  'header',
+  'hr',
+  'li',
+  'main',
+  'nav',
+  'ol',
+  'p',
+  'pre',
+  'section',
+  'table',
+  'tbody',
+  'td',
+  'tfoot',
+  'th',
+  'thead',
+  'tr',
+  'ul',
+]);
+
+const BLOCK_ELEMENT_SELECTOR = Array.from(BLOCK_ELEMENT_TAGS).join(',');
 
 function collectTextNodes(
   container: HTMLElement,

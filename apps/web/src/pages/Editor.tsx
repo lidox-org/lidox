@@ -40,6 +40,7 @@ import {
 import { AiProposal } from '../editor/AiProposal';
 import { AiHistoryPanel } from '../editor/AiHistoryPanel';
 import { encodeStateVector, serializeRange } from '../editor/aiSelection';
+import { normalizeAiReplacementHtml } from '../editor/aiSelection';
 import { PresenceCursors } from '../editor/PresenceCursors';
 import { ShareDialog } from '../editor/ShareDialog';
 import { VersionHistory } from '../editor/VersionHistory';
@@ -349,14 +350,22 @@ export function Editor() {
       });
 
       if (!aiProposal.readOnly && currentSelection) {
+        const replacementHtml = normalizeAiReplacementHtml({
+          originalHtml: currentSelection.html,
+          proposedText: input.text,
+          proposedHtml: input.html,
+        });
+
         editor
           .chain()
           .focus()
-          .deleteRange({
-            from: aiProposal.anchorFrom,
-            to: aiProposal.anchorTo,
-          })
-          .insertContentAt(aiProposal.anchorFrom, appliedContent)
+          .insertContentAt(
+            {
+              from: aiProposal.anchorFrom,
+              to: aiProposal.anchorTo,
+            },
+            replacementHtml,
+          )
           .run();
 
         setUndoAiChangeVisible(true);
