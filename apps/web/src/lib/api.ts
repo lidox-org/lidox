@@ -1,5 +1,17 @@
 const BASE_URL = '/api';
 
+function resolveApiUrl(path: string): string {
+  if (path.startsWith('http')) {
+    return path;
+  }
+
+  if (path === BASE_URL || path.startsWith(`${BASE_URL}/`)) {
+    return path;
+  }
+
+  return `${BASE_URL}${path}`;
+}
+
 async function tryRefreshToken(): Promise<boolean> {
   try {
     const res = await fetch(`${BASE_URL}/auth/refresh`, {
@@ -35,7 +47,7 @@ export async function api<T = unknown>(
     headers.set('Content-Type', 'application/json');
   }
 
-  const url = path.startsWith('http') ? path : `${BASE_URL}${path}`;
+  const url = resolveApiUrl(path);
 
   let res = await fetch(url, { ...init, headers, credentials: 'include' });
 
@@ -67,7 +79,7 @@ export async function fetchWithAuthRetry(
   retryOptions: FetchRetryOptions = {},
 ): Promise<Response> {
   const { skipAuth, ...init } = options;
-  const url = path.startsWith('http') ? path : `${BASE_URL}${path}`;
+  const url = resolveApiUrl(path);
 
   let res = await fetch(url, { ...init, credentials: 'include' });
 
@@ -93,3 +105,5 @@ export class ApiError extends Error {
     this.name = 'ApiError';
   }
 }
+
+export { resolveApiUrl };
