@@ -13,12 +13,12 @@ not the older intermediate branches.
 | Auth delivery | Cookie-based auth described in report | **HttpOnly cookies** for both access and refresh tokens | **Resolved** |
 | AI delivery to client | Streaming with cancelation | **Server-Sent Events** (`GET .../ai/tasks/:taskId/stream`) after `invoke`; FastAPI async tasks + Redis event stream | **Resolved** |
 | Offline editing | IndexedDB buffer, sync on reconnect | Browser-local **Yjs + IndexedDB** persistence via `y-indexeddb`, then CRDT sync on reconnect | **Resolved** |
-| Identity | Optional OAuth / SSO in diagrams | **Email/password plus Google OAuth** when `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` are configured; GitHub OAuth remains a placeholder | **Partially resolved** |
-| Version restore | Restoring applies prior document state | Snapshot restore rewinds the active editor immediately and rebroadcasts to connected clients | **Resolved** |
+| Identity | Optional OAuth / SSO in diagrams | **Email/password plus Google OAuth** when `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` are configured; GitHub OAuth remains a placeholder, and the current Google flow is a pragmatic callback/state implementation rather than a broader multi-provider SSO layer | **Partially resolved** |
+| Version restore | Restoring applies prior document state | Snapshot restore rewinds the active editor immediately, rebroadcasts to connected clients, and version history now shows stable visible numbering with preview text | **Resolved** |
 | `document_versions` storage | Single schema for API + sync | FastAPI and sync-server both use `snapshot` + `crdt_clock` rows in `document_versions` | **Resolved** |
 | AI worker topology | Assignment 1 design referenced a separate queue worker | The FastAPI app runs async AI tasks in-process and streams events from Redis | **Intentional simplification** |
 | Live permission revocation | Permission changes should cut off stale write sessions promptly | Permission changes are published through Redis and the sync server forcibly closes stale downgraded/revoked sessions, sending the user back to the dashboard | **Resolved** |
-| Export | DOCX and PDF export | **PDF export** is available from the editor header; **DOCX** export is still not implemented | **Partially resolved** |
+| Export | DOCX and PDF export | **PDF export** is available from the editor header, but it is a simplified text-focused PDF export; **DOCX** export and spec-style AI/tracked-change annotations are still not implemented | **Partially resolved** |
 
 ## Backend technology
 
@@ -39,6 +39,12 @@ Current behavior:
 
 This matches the cookie-first browser auth model expected by the report and avoids exposing auth tokens to frontend JavaScript.
 
+Notable deviation from the broader spec language:
+
+- Google sign-in is implemented as the only working OAuth provider.
+- GitHub OAuth is still a placeholder.
+- The current flow uses signed `state` plus a nonce cookie for CSRF/state validation; it is not presented in the repo as a full provider-agnostic SSO layer.
+
 ## AI pipeline (invoke → async task → SSE)
 
 1. Client **`POST /api/documents/:docId/ai/invoke`** returns `taskId`.
@@ -52,7 +58,8 @@ This satisfies the Assignment 2 streaming requirement without the older BullMQ w
 
 ## Version history and restore
 
-- **Listing versions:** `GET /api/documents/:id/versions` returns snapshot rows from `document_versions`.
+- **Listing versions:** `GET /api/documents/:id/versions` returns snapshot rows from `document_versions`, with stable visible numbering and preview text generated from the first logical document lines.
+- **Duplicate suppression:** consecutive identical snapshots are suppressed so version history does not show duplicate-looking entries for unchanged content.
 - **Restore:** `POST .../versions/:versionId/restore` writes a new restore row, publishes the restore event, and returns the snapshot so the active editor also rewinds immediately in the browser.
 - **Live sessions:** connected editors receive the restored content through normal Hocuspocus/Yjs updates.
 
@@ -65,12 +72,13 @@ This satisfies the Assignment 2 streaming requirement without the older BullMQ w
 ## Remaining gaps
 
 - **Additional OAuth providers:** GitHub OAuth / generic SSO are still placeholders.
-- **Document export parity:** PDF export is implemented, but DOCX export is still missing.
+- **Document export parity:** PDF export is implemented, but DOCX export and tracked-change / AI-annotation export parity are still missing.
 
 ## Tests and CI
 
-- CI runs: lint, typecheck, build, and `apps/api/test/**/*.test.ts` (Node native test runner).
+- GitHub Actions CI runs `corepack npm run lint`, `corepack npm run typecheck`, `corepack npm test`, and `corepack npm run build`.
+- Root `npm test` currently covers the Hocuspocus protocol-version check, the legacy Node API test suite, the sync-server tests, and the web Vitest suite.
 - Frontend tests: Vitest + React Testing Library in `apps/web`.
-- Sync-server restore logic: Node test in `apps/sync-server/src/extensions/restore.test.ts`.
-- FastAPI coverage: pytest suite in `apps/api-fastapi/tests`.
+- Sync-server coverage includes restore, version-preview, and permission-cutoff tests in `apps/sync-server/src/extensions/*.test.ts`.
+- FastAPI coverage exists as a pytest suite in `apps/api-fastapi/tests`, but that pytest suite is still run separately from GitHub Actions.
 - Playwright E2E: smoke test for login added; broader coverage is future work.
