@@ -39,9 +39,16 @@ MIGRATIONS: tuple[str, ...] = (
       document_id UUID NOT NULL REFERENCES documents(id),
       snapshot TEXT,
       crdt_clock INT NOT NULL,
+      preview_text TEXT,
+      snapshot_hash VARCHAR(64),
       created_by UUID NOT NULL REFERENCES users(id),
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+    """,
+    """
+    ALTER TABLE document_versions
+    ADD COLUMN IF NOT EXISTS preview_text TEXT,
+    ADD COLUMN IF NOT EXISTS snapshot_hash VARCHAR(64);
     """,
     """
     CREATE TABLE IF NOT EXISTS permissions (
@@ -99,4 +106,3 @@ MIGRATIONS: tuple[str, ...] = (
 async def run_migrations() -> None:
     for statement in MIGRATIONS:
         await execute(statement)
-
